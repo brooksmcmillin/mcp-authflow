@@ -12,7 +12,7 @@ MCP (Model Context Protocol) tool access:
 """
 
 from mcp_authflow.cors import build_cors_headers, get_cors_origin, parse_allowed_origins
-from mcp_authflow.rate_limiting import SlidingWindowRateLimiter
+from mcp_authflow.rate_limiting import AsyncRedisClient, SlidingWindowRateLimiter
 from mcp_authflow.responses import (
     OAUTH_NO_CACHE_HEADERS,
     backend_connection_error,
@@ -44,6 +44,7 @@ __all__ = [
     "get_cors_origin",
     "parse_allowed_origins",
     # Rate limiting
+    "AsyncRedisClient",
     "SlidingWindowRateLimiter",
     # OAuth responses
     "OAUTH_NO_CACHE_HEADERS",
@@ -70,7 +71,7 @@ __all__ = [
     "validate_client_id",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"
 
 
 def __getattr__(name: str) -> type:
