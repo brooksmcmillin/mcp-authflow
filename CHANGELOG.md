@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.3.0
+
+### Breaking changes
+
+- `SlidingWindowRateLimiter.is_allowed()` and `get_retry_after()` are now
+  coroutines. Callers must `await` them:
+
+  ```python
+  # Before
+  if limiter.is_allowed(client_id):
+      ...
+
+  # After
+  if await limiter.is_allowed(client_id):
+      ...
+  ```
+
+  This is required so the limiter can optionally back its sliding window
+  with Redis. The change applies to both the in-memory and Redis paths.
+
+### Added
+
+- `SlidingWindowRateLimiter` accepts an optional `redis: AsyncRedisClient`
+  argument. When provided, request timestamps are stored in a Redis sorted
+  set under the key `mcp_auth:ratelimit:<client_id>:<window_seconds>`,
+  giving shared state across replicas and survival across pod restarts.
+  When omitted, the limiter falls back to the existing in-process
+  `defaultdict` (suitable for local development and single-replica
+  deployments).
+- New `AsyncRedisClient` Protocol describes the subset of the
+  `redis.asyncio.Redis` interface the limiter needs (`zadd`,
+  `zremrangebyscore`, `zcard`, `expire`, `zrange`). Pass any object that
+  satisfies the protocol — no hard dependency on `redis-py` is added.
+
 ## 0.2.0
 
 ### Breaking changes
