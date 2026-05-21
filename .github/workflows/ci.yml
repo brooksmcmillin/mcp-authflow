@@ -6,8 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
+    name: Lint | Ruff
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,6 +24,7 @@ jobs:
       - run: uv run ruff format --check .
 
   typecheck:
+    name: Type | Pyright
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +35,7 @@ jobs:
       - run: uv run pyright
 
   test:
+    name: Test | py${{ matrix.python-version }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -41,3 +48,78 @@ jobs:
       - run: uv python install ${{ matrix.python-version }}
       - run: uv sync --frozen --python ${{ matrix.python-version }}
       - run: uv run pytest --tb=short
+
+  deptry:
+    name: Lint | Dependency Hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uvx deptry .
+
+  bandit:
+    name: Security | Bandit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uvx 'bandit[toml]' -c pyproject.toml -r . --severity-level medium
+
+  gitleaks:
+    name: Security | Secret Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  required-gate:
+    name: CI | Required Gate
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - lint
+      - typecheck
+      - test
+      - deptry
+      - bandit
+      - gitleaks
+    steps:
+      - name: Evaluate dependency results
+        env:
+          NEEDS_JSON: ${{ toJson(needs) }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          bad = []
+
+          for name, data in needs.items():
+              result = data.get("result")
+              # "skipped" is expected for path-gated / event-gated jobs.
+              if result in {"failure", "cancelled", "timed_out"}:
+                  bad.append((name, result))
+
+          if bad:
+              print("Required gate failed due to upstream job results:")
+              for name, result in bad:
+                  print(f"- {name}: {result}")
+              sys.exit(1)
+
+          print("Required gate passed.")
+          PY

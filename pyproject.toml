@@ -75,3 +75,14 @@ testpaths = ["tests"]
 [tool.pyright]
 pythonVersion = "3.11"
 typeCheckingMode = "standard"
+
+[tool.bandit]
+exclude_dirs = ["tests", "site", ".venv"]
+skips = ["B101"]  # assert_used — fine in tests/dev
+
+[tool.deptry]
+extend_exclude = ["site", "docs"]
+
+[tool.deptry.per_rule_ignores]
+# TODO: audit whether these declared deps are still needed.
+DEP002 = ["aiohttp", "mcp", "pydantic", "pydantic-settings"]

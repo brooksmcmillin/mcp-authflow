@@ -1,0 +1,66 @@
+# Pre-commit hooks for code quality and security
+# Install: pip install pre-commit  (or: uv tool install pre-commit)
+# Setup:   pre-commit install
+# Run:     pre-commit run --all-files
+
+repos:
+  # =============================================================================
+  # General hooks (all files)
+  # =============================================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: debug-statements
+      - id: mixed-line-ending
+
+  # Secret detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: >
+          (?x)^(
+            .*\.lock|
+            .*\.md$|
+            site/.*
+          )$
+
+  # =============================================================================
+  # Python hooks
+  # =============================================================================
+
+  # Linting and formatting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.13
+    hooks:
+      - id: ruff-check
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # Type checking (staged Python files only)
+  # To skip: SKIP=pyright git commit
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright
+        entry: .venv/bin/pyright
+        language: system
+        types: [python]
+        pass_filenames: true
+
+  # Security scanning
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.2
+    hooks:
+      - id: bandit
+        args: ['-c', 'pyproject.toml']
+        additional_dependencies: ['bandit[toml]']
