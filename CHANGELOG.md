@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.5.0
+
+### New: RFC 7523 `private_key_jwt` client authentication
+
+Adds `mcp_authflow.client_auth` — verifies `client_assertion` JWTs at the
+token endpoint per RFC 7523 (JWT Profile for OAuth 2.0 Client
+Authentication).
+
+```python
+from mcp_authflow import JWTClientAuthenticator, JWTAuthError
+
+class MyJWKSProvider:
+    async def get_jwks(self, client_id: str) -> dict | None:
+        # look up the client's JWKS however you like
+        ...
+
+authenticator = JWTClientAuthenticator(
+    token_endpoint="https://auth.example.com/token",
+    jwks_provider=MyJWKSProvider(),
+    # optionally: redis=redis.asyncio.Redis(...) for a shared replay cache
+)
+
+try:
+    await authenticator.authenticate(
+        client_id=client_id,
+        client_assertion=form["client_assertion"],
+        client_assertion_type=form["client_assertion_type"],
+    )
+except JWTAuthError as e:
+    return invalid_client(str(e))
+```
+
+Security properties:
+
+- **Algorithm allowlist** — only asymmetric algorithms (`RS{256,384,512}`,
+  `ES{256,384,512}`, `PS{256,384,512}`) are accepted. `none` and HMAC
+  algorithms are explicitly blocked to prevent algorithm-confusion attacks.
+- **Replay protection** — `jti` is required and tracked. Provide a Redis
+  client (`redis.asyncio.Redis`) for a persistent, multi-process-safe cache
+  (`SET NX PX`); otherwise an in-memory cache with TTL cleanup is used.
+- **Lifetime ceiling** — assertions with `iat` more than five minutes in the
+  past are rejected even if their `exp` would still accept them.
+- **Required claims** — `iss`, `sub`, `aud`, `exp`, `iat`, and `jti` are all
+  required; `sub == client_id` is enforced per RFC 7523.
+
+The new `JWKSProvider` Protocol keeps key-material resolution out of the
+library. Plug in static JWKS, RFC 7591 DCR records, Client ID Metadata
+Documents, or any other source by implementing
+`async def get_jwks(client_id: str) -> dict | None`.
+
+Adds `pyjwt[crypto] >= 2.8.0` to runtime dependencies.
+
 ## 0.4.0
 
 ### New: RFC 7591 Dynamic Client Registration

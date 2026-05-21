@@ -11,8 +11,18 @@ MCP (Model Context Protocol) tool access:
   with a pluggable :class:`ClientRegistry` persistence interface.
 - **Responses** — Standardized OAuth 2.0 error responses (RFC 6749).
 - **Validation** — Input sanitization for OAuth identifiers and scopes.
+- **Client authentication** — ``private_key_jwt`` (RFC 7523) verification
+  with an algorithm allowlist and replay protection.
 """
 
+from mcp_authflow.client_auth import (
+    ALLOWED_JWT_ALGORITHMS,
+    BLOCKED_JWT_ALGORITHMS,
+    JWT_CLIENT_ASSERTION_TYPE,
+    JWKSProvider,
+    JWTAuthError,
+    JWTClientAuthenticator,
+)
 from mcp_authflow.cors import build_cors_headers, get_cors_origin, parse_allowed_origins
 from mcp_authflow.rate_limiting import AsyncRedisClient, SlidingWindowRateLimiter
 from mcp_authflow.registration import (
@@ -55,6 +65,13 @@ __all__ = [
     # Rate limiting
     "AsyncRedisClient",
     "SlidingWindowRateLimiter",
+    # Client authentication (RFC 7523 private_key_jwt)
+    "ALLOWED_JWT_ALGORITHMS",
+    "BLOCKED_JWT_ALGORITHMS",
+    "JWT_CLIENT_ASSERTION_TYPE",
+    "JWKSProvider",
+    "JWTAuthError",
+    "JWTClientAuthenticator",
     # Dynamic Client Registration (RFC 7591)
     "ClientRegistrationRequest",
     "ClientRegistry",
@@ -86,7 +103,7 @@ __all__ = [
     "validate_client_id",
 ]
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 
 def __getattr__(name: str) -> type:
