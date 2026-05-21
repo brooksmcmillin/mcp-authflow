@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.4.0
+
+### New: RFC 7591 Dynamic Client Registration
+
+Adds `mcp_authflow.registration` — a storage-agnostic handler factory and
+persistence interface for RFC 7591 Dynamic Client Registration.
+
+```python
+from mcp_authflow.registration import (
+    MemoryClientRegistry,
+    build_register_handler,
+)
+from starlette.routing import Route
+
+handler = build_register_handler(
+    MemoryClientRegistry(),
+    default_scope="mcp:tools",
+)
+routes = [Route("/register", handler, methods=["POST"])]
+```
+
+Components:
+
+- `ClientRegistry` — abstract persistence interface (`create_client`,
+  `get_client`) that consumers implement against their own backend
+  (database, upstream IdP, etc.).
+- `MemoryClientRegistry` — process-local reference implementation.
+- `ClientRegistrationRequest` / `RegisteredClient` — parsed-input and
+  issued-client dataclasses.
+- `build_register_handler(...)` — returns a Starlette endpoint. Optional
+  hooks let the caller plug in an `mcp_authflow` rate limiter, default
+  redirect URIs, redirect-URI rewriters, a client-name factory, and
+  post-register hooks (e.g. cache warming) without forking the handler.
+
+The handler maps `grant_types=["client_credentials"]` to a confidential
+client (`token_endpoint_auth_method=client_secret_post`); any other
+request becomes a public client (`token_endpoint_auth_method=none`) with
+the MCP/auth-code/refresh/device-code bundle.
+
 ## 0.3.0
 
 ### Breaking changes

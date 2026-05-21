@@ -7,12 +7,21 @@ MCP (Model Context Protocol) tool access:
   and refresh tokens.
 - **CORS** — Origin validation helpers for OAuth/MCP endpoints.
 - **Rate limiting** — Sliding-window rate limiter for token endpoints.
+- **Registration** — RFC 7591 Dynamic Client Registration handler factory
+  with a pluggable :class:`ClientRegistry` persistence interface.
 - **Responses** — Standardized OAuth 2.0 error responses (RFC 6749).
 - **Validation** — Input sanitization for OAuth identifiers and scopes.
 """
 
 from mcp_authflow.cors import build_cors_headers, get_cors_origin, parse_allowed_origins
 from mcp_authflow.rate_limiting import AsyncRedisClient, SlidingWindowRateLimiter
+from mcp_authflow.registration import (
+    ClientRegistrationRequest,
+    ClientRegistry,
+    MemoryClientRegistry,
+    RegisteredClient,
+    build_register_handler,
+)
 from mcp_authflow.responses import (
     OAUTH_NO_CACHE_HEADERS,
     backend_connection_error,
@@ -46,6 +55,12 @@ __all__ = [
     # Rate limiting
     "AsyncRedisClient",
     "SlidingWindowRateLimiter",
+    # Dynamic Client Registration (RFC 7591)
+    "ClientRegistrationRequest",
+    "ClientRegistry",
+    "MemoryClientRegistry",
+    "RegisteredClient",
+    "build_register_handler",
     # OAuth responses
     "OAUTH_NO_CACHE_HEADERS",
     "backend_connection_error",
@@ -71,7 +86,7 @@ __all__ = [
     "validate_client_id",
 ]
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 
 def __getattr__(name: str) -> type:
