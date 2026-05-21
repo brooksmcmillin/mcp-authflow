@@ -8,6 +8,7 @@ Pair with [mcp-authflow-resource](https://github.com/brooksmcmillin/mcp-authflow
 
 - **Token storage** with PostgreSQL and in-memory backends
 - **RFC 6749** standardized OAuth error responses
+- **RFC 7523 `private_key_jwt`** client authentication with algorithm allowlist and JTI replay protection (Redis or in-memory)
 - **Sliding-window rate limiting** for token endpoints
 - **Input validation** for client IDs, scopes, and PKCE parameters
 - **CORS helpers** with origin allowlisting
