@@ -8,18 +8,24 @@ from starlette.responses import JSONResponse
 
 from mcp_authflow.responses import (
     OAUTH_NO_CACHE_HEADERS,
+    access_denied,
+    authorization_pending,
     backend_connection_error,
     backend_invalid_response,
     backend_oauth_error,
     backend_timeout,
+    expired_token,
     invalid_client,
     invalid_grant,
+    invalid_redirect_uri,
     invalid_request,
     invalid_scope,
     oauth_error,
+    pkce_required,
     rate_limit_exceeded,
     server_error,
     slow_down,
+    unsupported_grant_type,
 )
 
 # ---------------------------------------------------------------------------
@@ -362,6 +368,12 @@ class TestOauthNoCacheHeaders:
         (server_error, {"description": "err"}, 500, "server_error"),
         (invalid_grant, {"description": "expired"}, 400, "invalid_grant"),
         (invalid_scope, {"description": "scope"}, 400, "invalid_scope"),
+        (unsupported_grant_type, {"description": "nope"}, 400, "unsupported_grant_type"),
+        (access_denied, {"description": "denied"}, 400, "access_denied"),
+        (invalid_redirect_uri, {"description": "bad uri"}, 400, "invalid_redirect_uri"),
+        (authorization_pending, {}, 400, "authorization_pending"),
+        (expired_token, {}, 400, "expired_token"),
+        (pkce_required, {}, 400, "invalid_request"),
     ],
 )
 def test_all_constructors_set_no_cache_and_json(

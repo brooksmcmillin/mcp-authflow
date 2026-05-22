@@ -120,6 +120,63 @@ def invalid_scope(description: str) -> JSONResponse:
     return oauth_error("invalid_scope", description, 400)
 
 
+def unsupported_grant_type(description: str) -> JSONResponse:
+    """Create an unsupported_grant_type error response (400, RFC 6749 §5.2).
+
+    Use for: token endpoint received a grant_type the AS does not support.
+    """
+    return oauth_error("unsupported_grant_type", description, 400)
+
+
+def access_denied(description: str) -> JSONResponse:
+    """Create an access_denied error response (400, RFC 6749 §4.1.2.1 / §5.2).
+
+    Use for: resource owner or AS denied the request (e.g., user declined
+    consent at the ``/authorize`` step, or device flow ``authorize_device``
+    was called with action=deny).
+    """
+    return oauth_error("access_denied", description, 400)
+
+
+def invalid_redirect_uri(description: str) -> JSONResponse:
+    """Create an invalid_redirect_uri error response (400, RFC 7591 §3.2.2).
+
+    Use for: registration or authorization request supplied a redirect_uri
+    that is not allowed for the client.
+    """
+    return oauth_error("invalid_redirect_uri", description, 400)
+
+
+def authorization_pending(description: str = "Authorization pending") -> JSONResponse:
+    """Create an authorization_pending error response (400, RFC 8628 §3.5).
+
+    Use for: device flow token polling while the user has not yet completed
+    authorization. Clients should continue polling at the configured
+    ``interval``.
+    """
+    return oauth_error("authorization_pending", description, 400)
+
+
+def expired_token(description: str = "Device code has expired") -> JSONResponse:
+    """Create an expired_token error response (400, RFC 8628 §3.5).
+
+    Use for: device flow token polling after the ``device_code`` has expired.
+    """
+    return oauth_error("expired_token", description, 400)
+
+
+def pkce_required(
+    description: str = "PKCE is required for public clients",
+) -> JSONResponse:
+    """Create an invalid_request error indicating PKCE is required (400).
+
+    Public clients (no client_secret) MUST use PKCE per OAuth 2.1 / RFC 9700.
+    This returns the standard ``invalid_request`` OAuth error code with a
+    description that calls out the missing PKCE binding.
+    """
+    return oauth_error("invalid_request", description, 400)
+
+
 def backend_oauth_error(error_dict: dict[str, str], status_code: int) -> JSONResponse:
     """Create a JSONResponse from an already-formatted OAuth error dict.
 

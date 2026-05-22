@@ -27,6 +27,19 @@ if not verify_pkce(code_verifier, stored_challenge, method):
 Client-side `code_verifier`/`code_challenge` *generation* is intentionally
 out of scope; mcp-authflow remains an authorization-server framework.
 
+### New: RFC-aligned error response helpers
+
+`mcp_authflow.responses` gains the missing RFC 6749 / RFC 7591 / RFC 8628
+error constructors so callers can stop hand-rolling them:
+
+- `unsupported_grant_type(description)` — RFC 6749 §5.2.
+- `access_denied(description)` — RFC 6749 / RFC 8628.
+- `invalid_redirect_uri(description)` — RFC 7591 §3.2.2.
+- `authorization_pending(description="Authorization pending")` — RFC 8628 §3.5.
+- `expired_token(description="Device code has expired")` — RFC 8628 §3.5.
+- `pkce_required(description="PKCE is required for public clients")` —
+  emits `invalid_request` per OAuth 2.1 / RFC 9700 guidance.
+
 ## 0.5.0
 
 ### New: RFC 7523 `private_key_jwt` client authentication
