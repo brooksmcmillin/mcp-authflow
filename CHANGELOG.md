@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.6.0
+
+### New: PKCE (RFC 7636) verification and validation
+
+Adds `mcp_authflow.pkce` — authorization-server-side primitives for
+Proof Key for Code Exchange.
+
+```python
+from mcp_authflow import verify_pkce, validate_code_challenge_method
+
+if not validate_code_challenge_method(method):
+    raise InvalidRequest("unsupported code_challenge_method")
+
+if not verify_pkce(code_verifier, stored_challenge, method):
+    raise InvalidGrant("PKCE verification failed")
+```
+
+- `verify_pkce(code_verifier, code_challenge, method)` — constant-time
+  check supporting `S256` and `plain`. Unknown methods return `False`.
+- `validate_code_verifier` / `validate_code_challenge` — RFC 7636 §4.1/§4.2
+  length (43-128) and unreserved-charset checks.
+- `validate_code_challenge_method` — allowlist of `{"S256", "plain"}`.
+- `ALLOWED_CODE_CHALLENGE_METHODS` — the frozen set for direct use.
+
+Client-side `code_verifier`/`code_challenge` *generation* is intentionally
+out of scope; mcp-authflow remains an authorization-server framework.
+
 ## 0.5.0
 
 ### New: RFC 7523 `private_key_jwt` client authentication

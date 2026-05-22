@@ -9,7 +9,8 @@ OAuth 2.0 **Authorization Server** framework for [MCP](https://modelcontextproto
 - **Token storage** with PostgreSQL and in-memory backends
 - **RFC 6749** standardized OAuth error responses
 - **Sliding-window rate limiting** for token endpoints (in-process or Redis)
-- **Input validation** for client IDs, scopes, and PKCE parameters
+- **Input validation** for client IDs and scopes
+- **RFC 7636 PKCE** verification (`S256` + `plain`) and input validation
 - **CORS helpers** with origin allowlisting
 - **Async-first** design, built on Starlette
 
