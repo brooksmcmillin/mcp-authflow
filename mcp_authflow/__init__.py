@@ -13,6 +13,8 @@ MCP (Model Context Protocol) tool access:
 - **Validation** — Input sanitization for OAuth identifiers and scopes.
 - **Client authentication** — ``private_key_jwt`` (RFC 7523) verification
   with an algorithm allowlist and replay protection.
+- **PKCE** — ``code_verifier`` / ``code_challenge`` verification and
+  validation (RFC 7636) for the token endpoint.
 """
 
 from mcp_authflow.client_auth import (
@@ -24,6 +26,13 @@ from mcp_authflow.client_auth import (
     JWTClientAuthenticator,
 )
 from mcp_authflow.cors import build_cors_headers, get_cors_origin, parse_allowed_origins
+from mcp_authflow.pkce import (
+    ALLOWED_CODE_CHALLENGE_METHODS,
+    validate_code_challenge,
+    validate_code_challenge_method,
+    validate_code_verifier,
+    verify_pkce,
+)
 from mcp_authflow.rate_limiting import AsyncRedisClient, SlidingWindowRateLimiter
 from mcp_authflow.registration import (
     ClientRegistrationRequest,
@@ -101,9 +110,15 @@ __all__ = [
     "parse_json_field",
     "parse_scope_field",
     "validate_client_id",
+    # PKCE (RFC 7636)
+    "ALLOWED_CODE_CHALLENGE_METHODS",
+    "validate_code_challenge",
+    "validate_code_challenge_method",
+    "validate_code_verifier",
+    "verify_pkce",
 ]
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 
 def __getattr__(name: str) -> type:
