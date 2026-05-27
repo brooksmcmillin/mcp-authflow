@@ -157,7 +157,11 @@ class JWTClientAuthenticator:
         ttl_ms = math.ceil(ttl_seconds * 1000)
 
         key = f"{_REDIS_JTI_PREFIX}{jti}"
-        assert self._redis is not None
+        if self._redis is None:
+            raise RuntimeError(
+                "Redis client is required but was not provided; "
+                "_check_and_record_jti_redis must not be called without a Redis client."
+            )
         result: bool | None = await self._redis.set(key, "1", nx=True, px=ttl_ms)
         return result is True
 

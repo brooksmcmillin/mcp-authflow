@@ -117,7 +117,11 @@ class SlidingWindowRateLimiter:
         For strict atomicity a Lua script could be used; the pipeline approach
         here is simpler.
         """
-        assert self._redis is not None  # guaranteed by is_allowed dispatch
+        if self._redis is None:
+            raise RuntimeError(
+                "Redis client is required but was not provided; "
+                "_is_allowed_redis must not be called without a Redis client."
+            )
         key = self._redis_key(client_id)
         now = time.time()
         window_start = now - self.window_seconds
@@ -139,7 +143,11 @@ class SlidingWindowRateLimiter:
         return True
 
     async def _get_retry_after_redis(self, client_id: str) -> int:
-        assert self._redis is not None  # guaranteed by get_retry_after dispatch
+        if self._redis is None:
+            raise RuntimeError(
+                "Redis client is required but was not provided; "
+                "_get_retry_after_redis must not be called without a Redis client."
+            )
         key = self._redis_key(client_id)
         now = time.time()
         window_start = now - self.window_seconds
