@@ -176,7 +176,34 @@ storage = PostgresTokenStorage(database_url="postgresql://user:pass@host/db")
 # Or reads DATABASE_URL env var if no argument provided
 storage = PostgresTokenStorage()
 
-await storage.initialize()  # Create tables / prepare connections
+await storage.initialize()  # Open the connection pool (in-memory needs no setup)
+```
+
+`PostgresTokenStorage` does **not** create or migrate its schema — it expects
+the tables to already exist, so you stay in control of migrations. Apply this
+DDL (e.g. via your migration tool) before first use:
+
+```sql
+CREATE TABLE IF NOT EXISTS mcp_access_tokens (
+    token       TEXT PRIMARY KEY,
+    client_id   TEXT NOT NULL,
+    scopes      TEXT NOT NULL DEFAULT '',
+    resource    TEXT,
+    expires_at  TIMESTAMPTZ NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    user_id     INTEGER
+);
+
+-- Only needed if you use the refresh-token methods.
+CREATE TABLE IF NOT EXISTS mcp_refresh_tokens (
+    token       TEXT PRIMARY KEY,
+    client_id   TEXT NOT NULL,
+    scopes      TEXT NOT NULL DEFAULT '',
+    resource    TEXT,
+    expires_at  TIMESTAMPTZ NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    user_id     INTEGER
+);
 ```
 
 **Storage interface:**
