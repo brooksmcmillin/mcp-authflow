@@ -280,7 +280,7 @@ class TestLoadTokenReturnFormat:
     @pytest.mark.asyncio
     async def test_load_token_returns_unix_timestamps(self) -> None:
         storage = _make_storage()
-        future = datetime(2026, 6, 1, 12, 0, 0, tzinfo=UTC)
+        future = datetime.now(UTC) + timedelta(hours=1)
         created = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
         row = {
             "token": "tok",
