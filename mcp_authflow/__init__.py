@@ -20,6 +20,13 @@ MCP (Model Context Protocol) tool access:
   endpoint.
 """
 
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("mcp-authflow")
+except PackageNotFoundError:  # pragma: no cover - package not installed (e.g. source tree)
+    __version__ = "0.0.0+unknown"
+
 from mcp_authflow.client_auth import (
     ALLOWED_JWT_ALGORITHMS,
     BLOCKED_JWT_ALGORITHMS,
@@ -155,8 +162,6 @@ __all__ = [
     "generate_user_code",
     "normalize_user_code",
 ]
-
-__version__ = "0.6.0"
 
 
 def __getattr__(name: str) -> type:
