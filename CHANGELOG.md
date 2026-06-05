@@ -12,6 +12,13 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Added
 
+- `build_register_handler` gained three Dynamic Client Registration hardening
+  hooks: `auth_validator` (RFC 7591 §3.1 initial-access-token gate, returns
+  `401` on failure), `redirect_uri_validator` (defaults to an https-only policy
+  with an http loopback exception per OAuth 2.1 §9.7; overridable or
+  disable-able), and `get_client_ip` (resolve the rate-limit key from a trusted
+  proxy header instead of the direct TCP peer).
+
 ### Changed
 
 ### Deprecated
@@ -21,6 +28,12 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 ### Fixed
 
 ### Security
+
+- Dynamic Client Registration now validates `redirect_uris` by default,
+  rejecting `javascript:`/`data:`/non-loopback `http`/fragment-bearing URIs that
+  could enable open-redirect or authorization-code theft. The registration
+  endpoint can now require an initial access token via `auth_validator`, and the
+  per-IP rate limiter can key on the real client behind a reverse proxy.
 
 ## 0.6.0
 

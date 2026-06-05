@@ -319,6 +319,133 @@ class TestRateLimiting:
         assert third.json()["error"] == "slow_down"
 
 
+class TestAuthValidator:
+    def test_rejects_when_validator_returns_false(self) -> None:
+        async def deny(request: Any) -> bool:
+            return False
+
+        client, registry = _make_client(auth_validator=deny)
+        resp = client.post("/register", json={"redirect_uris": ["http://localhost/cb"]})
+        assert resp.status_code == 401
+        assert resp.json()["error"] == "invalid_client"
+        # Request never reached the registry.
+        assert registry._clients == {}
+
+    def test_allows_when_validator_returns_true(self) -> None:
+        seen: list[str] = []
+
+        async def allow(request: Any) -> bool:
+            seen.append(request.headers.get("authorization", ""))
+            return True
+
+        client, _ = _make_client(auth_validator=allow)
+        resp = client.post(
+            "/register",
+            json={"redirect_uris": ["http://localhost/cb"]},
+            headers={"Authorization": "Bearer initial-access-token"},
+        )
+        assert resp.status_code == 201
+        assert seen == ["Bearer initial-access-token"]
+
+    def test_auth_runs_before_rate_limit(self) -> None:
+        # An unauthorized request must be rejected with 401, not 429, even
+        # when the limiter would otherwise be the first gate.
+        limiter = SlidingWindowRateLimiter(requests_per_window=1, window_seconds=60)
+
+        async def deny(request: Any) -> bool:
+            return False
+
+        client, _ = _make_client(auth_validator=deny, rate_limiter=limiter)
+        for _ in range(3):
+            resp = client.post("/register", json={"redirect_uris": ["http://localhost/cb"]})
+            assert resp.status_code == 401
+
+
+class TestRedirectUriValidation:
+    def test_rejects_javascript_scheme_by_default(self) -> None:
+        client, _ = _make_client()
+        resp = client.post(
+            "/register",
+            json={"redirect_uris": ["javascript:alert(1)"]},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["error"] == "invalid_redirect_uri"
+
+    def test_rejects_non_loopback_http_by_default(self) -> None:
+        client, _ = _make_client()
+        resp = client.post(
+            "/register",
+            json={"redirect_uris": ["http://evil.example.com/cb"]},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["error"] == "invalid_redirect_uri"
+
+    def test_rejects_uri_with_fragment(self) -> None:
+        client, _ = _make_client()
+        resp = client.post(
+            "/register",
+            json={"redirect_uris": ["https://example.com/cb#frag"]},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["error"] == "invalid_redirect_uri"
+
+    def test_allows_https_and_loopback_http(self) -> None:
+        client, _ = _make_client()
+        resp = client.post(
+            "/register",
+            json={
+                "redirect_uris": [
+                    "https://app.example.com/cb",
+                    "http://localhost:3000/cb",
+                    "http://127.0.0.1/cb",
+                ]
+            },
+        )
+        assert resp.status_code == 201
+
+    def test_custom_validator_overrides_default(self) -> None:
+        client, _ = _make_client(redirect_uri_validator=lambda uri: uri.startswith("com.example."))
+        ok = client.post("/register", json={"redirect_uris": ["com.example.app:/cb"]})
+        assert ok.status_code == 201
+        bad = client.post("/register", json={"redirect_uris": ["https://example.com/cb"]})
+        assert bad.status_code == 400
+
+    def test_disabling_validator_allows_anything(self) -> None:
+        client, _ = _make_client(redirect_uri_validator=None)
+        resp = client.post("/register", json={"redirect_uris": ["javascript:alert(1)"]})
+        assert resp.status_code == 201
+
+
+class TestClientIpResolver:
+    async def test_custom_resolver_keys_rate_limit(self) -> None:
+        # Two requests with distinct forwarded IPs each get their own bucket,
+        # so neither is blocked despite a window of 1.
+        limiter = SlidingWindowRateLimiter(requests_per_window=1, window_seconds=60)
+
+        def from_xff(request: Any) -> str:
+            return request.headers.get("x-forwarded-for", "unknown")
+
+        registry = MemoryClientRegistry()
+        handler = build_register_handler(
+            registry,
+            default_scope=DEFAULT_SCOPE,
+            rate_limiter=limiter,
+            get_client_ip=from_xff,
+        )
+        app = Starlette(routes=[Route("/register", handler, methods=["POST"])])
+        http = TestClient(app)
+
+        body: dict[str, Any] = {"redirect_uris": ["http://localhost/cb"]}
+
+        def post(ip: str) -> int:
+            return http.post("/register", json=body, headers={"X-Forwarded-For": ip}).status_code
+
+        assert post("1.1.1.1") == 201
+        assert post("2.2.2.2") == 201
+        # Same forwarded IP a second time is blocked.
+        assert post("1.1.1.1") == 429
+
+
 # Sanity check: the public API surface re-exports what the tests use.
 def test_public_api_surface() -> None:
     import mcp_authflow.registration as reg
