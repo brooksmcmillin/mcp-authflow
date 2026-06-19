@@ -15,7 +15,7 @@ except ImportError as _exc:
         "PostgresTokenStorage requires asyncpg. Install it with: pip install mcp-authflow[postgres]"
     ) from _exc
 
-from mcp_authflow.storage.base import TokenStorage
+from mcp_authflow.storage.base import TokenStorage, token_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ class PostgresTokenStorage(TokenStorage):
                 expires_datetime,
                 user_id,
             )
-        logger.debug("Stored token %s... for client %s", token[:20], client_id)
+        logger.debug("Stored token %s for client %s", token_fingerprint(token), client_id)
 
     async def load_token(self, token: str) -> dict[str, Any] | None:
         """Load an access token from the database.
@@ -124,13 +124,13 @@ class PostgresTokenStorage(TokenStorage):
             )
 
         if not row:
-            logger.debug("Token %s... not found in database", token[:20])
+            logger.debug("Token %s not found in database", token_fingerprint(token))
             return None
 
         expires_at = row["expires_at"]
         now = datetime.now(UTC)
         if expires_at < now:
-            logger.debug("Token %s... has expired", token[:20])
+            logger.debug("Token %s has expired", token_fingerprint(token))
             # Clean up expired token
             await self.delete_token(token)
             return None
@@ -159,7 +159,7 @@ class PostgresTokenStorage(TokenStorage):
                 "DELETE FROM mcp_access_tokens WHERE token = $1",
                 token,
             )
-        logger.debug("Deleted token %s...", token[:20])
+        logger.debug("Deleted token %s", token_fingerprint(token))
 
     async def cleanup_expired_tokens(self) -> int:
         """Remove all expired tokens from the database.
@@ -240,7 +240,9 @@ class PostgresTokenStorage(TokenStorage):
                 expires_datetime,
                 user_id,
             )
-        logger.debug("Stored refresh token %s... for client %s", refresh_token[:20], client_id)
+        logger.debug(
+            "Stored refresh token %s for client %s", token_fingerprint(refresh_token), client_id
+        )
 
     async def load_refresh_token(self, refresh_token: str) -> dict[str, Any] | None:
         """Load a refresh token from the database.
@@ -265,14 +267,14 @@ class PostgresTokenStorage(TokenStorage):
             )
 
         if not row:
-            logger.debug("Refresh token %s... not found in database", refresh_token[:20])
+            logger.debug("Refresh token %s not found in database", token_fingerprint(refresh_token))
             return None
 
         # Check if expired
         expires_at = row["expires_at"]
         now = datetime.now(UTC)
         if expires_at < now:
-            logger.debug("Refresh token %s... has expired", refresh_token[:20])
+            logger.debug("Refresh token %s has expired", token_fingerprint(refresh_token))
             await self.delete_refresh_token(refresh_token)
             return None
 
@@ -300,7 +302,7 @@ class PostgresTokenStorage(TokenStorage):
                 "DELETE FROM mcp_refresh_tokens WHERE token = $1",
                 refresh_token,
             )
-        logger.debug("Deleted refresh token %s...", refresh_token[:20])
+        logger.debug("Deleted refresh token %s", token_fingerprint(refresh_token))
 
     async def cleanup_expired_refresh_tokens(self) -> int:
         """Remove all expired refresh tokens from the database.

@@ -1,7 +1,25 @@
 """Abstract base class for token storage implementations."""
 
+import hashlib
 from abc import ABC, abstractmethod
 from typing import Any
+
+
+def token_fingerprint(token: str) -> str:
+    """Return a short, non-reversible fingerprint of a token for logging.
+
+    Logging a raw token prefix leaks a large fraction of its entropy into log
+    storage. A truncated SHA-256 digest lets operators correlate log lines for
+    the same token without exposing material that shrinks an offline search
+    space.
+
+    Args:
+        token: The secret token (or client_id) to fingerprint.
+
+    Returns:
+        A ``"fp:"``-prefixed 8-character hex digest.
+    """
+    return "fp:" + hashlib.sha256(token.encode()).hexdigest()[:8]
 
 
 class TokenStorage(ABC):
