@@ -4,7 +4,7 @@ import logging
 import time
 from typing import Any
 
-from mcp_authflow.storage.base import TokenStorage
+from mcp_authflow.storage.base import TokenStorage, token_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ class MemoryTokenStorage(TokenStorage):
             "created_at": int(time.time()),
             "user_id": user_id,
         }
-        logger.debug("Stored token %s... for client %s", token[:20], client_id)
+        logger.debug("Stored token %s for client %s", token_fingerprint(token), client_id)
 
     async def load_token(self, token: str) -> dict[str, Any] | None:
         """Load an access token from memory.
@@ -81,13 +81,13 @@ class MemoryTokenStorage(TokenStorage):
 
         token_data = self._access_tokens.get(token)
         if not token_data:
-            logger.debug("Token %s... not found in memory", token[:20])
+            logger.debug("Token %s not found in memory", token_fingerprint(token))
             return None
 
         # Check if expired
         now = int(time.time())
         if token_data["expires_at"] < now:
-            logger.debug("Token %s... has expired", token[:20])
+            logger.debug("Token %s has expired", token_fingerprint(token))
             await self.delete_token(token)
             return None
 
@@ -104,7 +104,7 @@ class MemoryTokenStorage(TokenStorage):
 
         if token in self._access_tokens:
             del self._access_tokens[token]
-            logger.debug("Deleted token %s...", token[:20])
+            logger.debug("Deleted token %s", token_fingerprint(token))
 
     async def cleanup_expired_tokens(self) -> int:
         """Remove all expired access tokens from memory.
@@ -170,7 +170,9 @@ class MemoryTokenStorage(TokenStorage):
             "created_at": int(time.time()),
             "user_id": user_id,
         }
-        logger.debug("Stored refresh token %s... for client %s", refresh_token[:20], client_id)
+        logger.debug(
+            "Stored refresh token %s for client %s", token_fingerprint(refresh_token), client_id
+        )
 
     async def load_refresh_token(self, refresh_token: str) -> dict[str, Any] | None:
         """Load a refresh token from memory.
@@ -186,13 +188,13 @@ class MemoryTokenStorage(TokenStorage):
 
         token_data = self._refresh_tokens.get(refresh_token)
         if not token_data:
-            logger.debug("Refresh token %s... not found in memory", refresh_token[:20])
+            logger.debug("Refresh token %s not found in memory", token_fingerprint(refresh_token))
             return None
 
         # Check if expired
         now = int(time.time())
         if token_data["expires_at"] < now:
-            logger.debug("Refresh token %s... has expired", refresh_token[:20])
+            logger.debug("Refresh token %s has expired", token_fingerprint(refresh_token))
             await self.delete_refresh_token(refresh_token)
             return None
 
@@ -209,7 +211,7 @@ class MemoryTokenStorage(TokenStorage):
 
         if refresh_token in self._refresh_tokens:
             del self._refresh_tokens[refresh_token]
-            logger.debug("Deleted refresh token %s...", refresh_token[:20])
+            logger.debug("Deleted refresh token %s", token_fingerprint(refresh_token))
 
     async def cleanup_expired_refresh_tokens(self) -> int:
         """Remove all expired refresh tokens from memory.

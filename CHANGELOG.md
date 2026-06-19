@@ -29,6 +29,11 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Security
 
+- Token lifecycle DEBUG logs no longer emit a raw `token[:20]` prefix. Both the
+  in-memory and PostgreSQL storage backends now log a non-reversible
+  `fp:<sha256[:8]>` fingerprint (new `mcp_authflow.storage.base.token_fingerprint`
+  helper), so a readable debug log no longer shrinks a token's offline search
+  space while remaining correlatable across log lines.
 - Dynamic Client Registration now validates `redirect_uris` by default,
   rejecting `javascript:`/`data:`/non-loopback `http`/fragment-bearing URIs that
   could enable open-redirect or authorization-code theft. The registration
