@@ -55,7 +55,12 @@ def build_cors_headers(request: Request, allowed_origins: list[str]) -> dict[str
     """
     headers: dict[str, str] = {
         "Access-Control-Allow-Methods": "GET, OPTIONS",
-        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept",
+        # Access-Control-Allow-Origin is derived from the request Origin, so
+        # caches must key on Origin to avoid serving a permissive ACAO header
+        # generated for a trusted origin to a different, untrusted one
+        # (Fetch spec requirement).
+        "Vary": "Origin",
     }
     origin = get_cors_origin(request, allowed_origins)
     if origin:
