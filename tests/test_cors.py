@@ -107,14 +107,16 @@ class TestBuildCorsHeaders:
         headers = build_cors_headers(request, ["https://allowed.com"])
         assert headers["Access-Control-Allow-Origin"] == "https://allowed.com"
         assert headers["Access-Control-Allow-Methods"] == "GET, OPTIONS"
-        assert headers["Access-Control-Allow-Headers"] == "*"
+        assert headers["Access-Control-Allow-Headers"] == "Authorization, Content-Type, Accept"
+        assert headers["Vary"] == "Origin"
 
     def test_disallowed_origin_omits_acao(self) -> None:
         request = _make_request("https://evil.com")
         headers = build_cors_headers(request, ["https://allowed.com"])
         assert "Access-Control-Allow-Origin" not in headers
         assert headers["Access-Control-Allow-Methods"] == "GET, OPTIONS"
-        assert headers["Access-Control-Allow-Headers"] == "*"
+        assert headers["Access-Control-Allow-Headers"] == "Authorization, Content-Type, Accept"
+        assert headers["Vary"] == "Origin"
 
     def test_no_origin_header_omits_acao(self) -> None:
         request = _make_request()
@@ -126,4 +128,5 @@ class TestBuildCorsHeaders:
         headers = build_cors_headers(request, [])
         assert "Access-Control-Allow-Methods" in headers
         assert "Access-Control-Allow-Headers" in headers
-        assert len(headers) == 2  # only methods + headers, no ACAO
+        assert headers["Vary"] == "Origin"
+        assert len(headers) == 3  # methods + headers + Vary, no ACAO
