@@ -21,6 +21,7 @@ The module deliberately does no DB I/O and no HTTP — it composes with the
 Starlette response helpers in :mod:`mcp_authflow.responses`.
 """
 
+import math
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -33,6 +34,11 @@ DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 # Matches the alphabet recommended by RFC 8628 §6.1 (entropy >= 20 bits for an
 # 8-char code: log2(20**8) ≈ 34.6 bits).
 _USER_CODE_ALPHABET = "BCDFGHJKLMNPQRSTVWXZ"
+
+# RFC 8628 §6.1 recommends a user-code entropy floor of ~20 bits to keep the
+# code space large enough to resist online brute force during the (short) device
+# polling window.
+_MIN_USER_CODE_ENTROPY_BITS = 20.0
 
 
 class DeviceCodeStatus(StrEnum):
@@ -63,9 +69,21 @@ def generate_user_code(groups: int = 2, group_size: int = 4, separator: str = "-
 
     Returns:
         Upper-case code drawn from an unambiguous consonant alphabet.
+
+    Raises:
+        ValueError: If ``groups`` or ``group_size`` is below 1, or if the
+            resulting code carries less than ~20 bits of entropy (the RFC 8628
+            §6.1 floor).
     """
     if groups < 1 or group_size < 1:
         raise ValueError("groups and group_size must be >= 1")
+    entropy_bits = math.log2(len(_USER_CODE_ALPHABET)) * (groups * group_size)
+    if entropy_bits < _MIN_USER_CODE_ENTROPY_BITS:
+        raise ValueError(
+            f"user_code entropy {entropy_bits:.1f} bits is below the RFC 8628 "
+            f"§6.1 minimum of {_MIN_USER_CODE_ENTROPY_BITS:.0f} bits; "
+            f"increase groups or group_size"
+        )
     chunks = [
         "".join(secrets.choice(_USER_CODE_ALPHABET) for _ in range(group_size))
         for _ in range(groups)

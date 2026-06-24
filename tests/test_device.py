@@ -80,6 +80,18 @@ class TestGenerateUserCode:
         with pytest.raises(ValueError):
             generate_user_code(group_size=0)
 
+    def test_below_entropy_floor_raises(self) -> None:
+        # 1*1 = ~4.3 bits, 1*4 = ~17.3 bits — both below the 20-bit floor.
+        with pytest.raises(ValueError, match="entropy"):
+            generate_user_code(groups=1, group_size=1)
+        with pytest.raises(ValueError, match="entropy"):
+            generate_user_code(groups=1, group_size=4)
+
+    def test_at_entropy_floor_succeeds(self) -> None:
+        # 5 chars * log2(20) ≈ 21.6 bits — just above the floor.
+        code = generate_user_code(groups=1, group_size=5)
+        assert len(code) == 5
+
 
 # ---------------------------------------------------------------------------
 # normalize_user_code
