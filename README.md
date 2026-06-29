@@ -57,10 +57,10 @@ async def token_endpoint(request: Request) -> JSONResponse:
     client_id = str(form.get("client_id", ""))
 
     # Rate limit per client
-    if not limiter.is_allowed(client_id):
+    if not await limiter.is_allowed(client_id):
         return rate_limit_exceeded(
             "Too many requests",
-            retry_after=limiter.get_retry_after(client_id),
+            retry_after=await limiter.get_retry_after(client_id),
         )
 
     # Validate client
@@ -263,8 +263,8 @@ limiter = SlidingWindowRateLimiter(
     window_seconds=3600,      # Window duration (1 hour)
 )
 
-if not limiter.is_allowed(client_id):
-    retry_after = limiter.get_retry_after(client_id)  # Seconds until next allowed request
+if not await limiter.is_allowed(client_id):
+    retry_after = await limiter.get_retry_after(client_id)  # Seconds until next allowed request
 ```
 
 ### Input Validation
