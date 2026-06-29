@@ -39,10 +39,10 @@ async def token_endpoint(request: Request) -> JSONResponse:
     form = await request.form()
     client_id = str(form.get("client_id", ""))
 
-    if not limiter.is_allowed(client_id):
+    if not await limiter.is_allowed(client_id):
         return rate_limit_exceeded(
             "Too many requests",
-            retry_after=limiter.get_retry_after(client_id),
+            retry_after=await limiter.get_retry_after(client_id),
         )
 
     if not validate_client_id(client_id):
@@ -131,7 +131,7 @@ storage = PostgresTokenStorage(database_url="postgresql://user:pass@host/db")
 storage = PostgresTokenStorage()
 ```
 
-The interface is identical. `await storage.initialize()` creates the necessary tables on first use.
+The interface is identical, but `PostgresTokenStorage` does **not** create its schema — `await storage.initialize()` only opens the connection pool. Create the tables yourself before first use (see the [DDL in the README](https://github.com/brooksmcmillin/mcp-authflow#token-storage)).
 
 ## Next steps
 
