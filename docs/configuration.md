@@ -33,10 +33,15 @@ Two backends ship with the package.
     # Or read DATABASE_URL from env
     storage = PostgresTokenStorage()
 
-    await storage.initialize()  # Creates tables if missing
+    await storage.initialize()  # Opens the connection pool (does NOT create tables)
     ```
 
     Requires the `postgres` extra: `pip install mcp-authflow[postgres]`.
+
+    `PostgresTokenStorage` does **not** create or migrate its schema — apply the
+    table DDL yourself before first use. See
+    [the README](https://github.com/brooksmcmillin/mcp-authflow#token-storage)
+    for the full schema.
 
 To plug in a different backend, implement the [`TokenStorage`][mcp_authflow.storage.TokenStorage] abstract base.
 
