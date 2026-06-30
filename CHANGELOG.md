@@ -27,6 +27,15 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Fixed
 
+- Docs: rate-limiter examples in the README and Quick Start now `await`
+  `SlidingWindowRateLimiter.is_allowed()` and `get_retry_after()` (both async
+  since 0.3.0). The previous snippets called the coroutines without `await`, so
+  copy-pasted code silently never rate-limited (`if not <coroutine>` is always
+  false).
+- Docs: the Quick Start and Configuration guides no longer claim
+  `PostgresTokenStorage.initialize()` creates the database schema — it only
+  opens the connection pool. Both now point at the manual DDL in the README.
+
 ### Security
 
 - Token lifecycle DEBUG logs no longer emit a raw `token[:20]` prefix. Both the
