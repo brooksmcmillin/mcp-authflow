@@ -21,6 +21,13 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Changed
 
+- `rate_limit_exceeded()` now emits the `too_many_requests` OAuth error code
+  instead of `slow_down`. The shared `slow_down` code collided with the
+  device-flow polling signal that RFC 8628 §3.5 reserves for `slow_down`, so a
+  generic 429 (e.g. from registration or introspection rate limiting) could push
+  a client into device-flow backoff. Clients that branch on the `error` field of
+  a 429 response should match `too_many_requests`.
+
 ### Deprecated
 
 ### Removed

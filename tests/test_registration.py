@@ -314,9 +314,9 @@ class TestRateLimiting:
         # Third request from the same client IP is blocked.
         third = http.post("/register", json=body)
         assert third.status_code == 429
-        # mcp_authflow.responses.rate_limit_exceeded uses the RFC 6749
-        # "slow_down" error code per the existing helper.
-        assert third.json()["error"] == "slow_down"
+        # mcp_authflow.responses.rate_limit_exceeded emits "too_many_requests"
+        # (distinct from the device-flow "slow_down" polling signal).
+        assert third.json()["error"] == "too_many_requests"
 
 
 class TestAuthValidator:
