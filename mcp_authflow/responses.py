@@ -71,10 +71,21 @@ def slow_down(description: str, retry_after: int | None = None) -> JSONResponse:
 def rate_limit_exceeded(description: str, retry_after: int | None = None) -> JSONResponse:
     """Create a rate limit exceeded error response (429).
 
-    Use for: too many requests.
+    Use for: too many requests to a generic endpoint (registration,
+    introspection, etc.).
+
+    Emits the ``too_many_requests`` error code so it does not collide with the
+    device-flow polling signal produced by :func:`slow_down`. RFC 8628 §3.5
+    reserves ``slow_down`` specifically for device-flow token polling, so a
+    generic 429 must use a distinct code to avoid pushing clients into
+    device-flow backoff.
+
+    Args:
+        description: Error description
+        retry_after: Optional retry-after value in seconds
     """
     extra_headers = {"Retry-After": str(retry_after)} if retry_after else None
-    return oauth_error("slow_down", description, 429, extra_headers)
+    return oauth_error("too_many_requests", description, 429, extra_headers)
 
 
 def server_error(description: str, status_code: int = 500) -> JSONResponse:

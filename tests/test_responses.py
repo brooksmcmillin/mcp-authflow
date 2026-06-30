@@ -163,9 +163,10 @@ class TestRateLimitExceeded:
     def test_status_code_is_429(self) -> None:
         assert rate_limit_exceeded("too many requests").status_code == 429
 
-    def test_error_code_is_slow_down(self) -> None:
-        # rate_limit_exceeded reuses the "slow_down" error code per OAuth spec
-        assert _body(rate_limit_exceeded("too many requests"))["error"] == "slow_down"
+    def test_error_code_is_too_many_requests(self) -> None:
+        # rate_limit_exceeded uses a distinct code so it does not collide with
+        # the device-flow "slow_down" polling signal (RFC 8628 §3.5).
+        assert _body(rate_limit_exceeded("too many requests"))["error"] == "too_many_requests"
 
     def test_description_is_forwarded(self) -> None:
         assert (
@@ -364,7 +365,7 @@ class TestOauthNoCacheHeaders:
         (invalid_request, {"description": "bad"}, 400, "invalid_request"),
         (invalid_client, {"description": "unauth"}, 401, "invalid_client"),
         (slow_down, {"description": "slow"}, 400, "slow_down"),
-        (rate_limit_exceeded, {"description": "limit"}, 429, "slow_down"),
+        (rate_limit_exceeded, {"description": "limit"}, 429, "too_many_requests"),
         (server_error, {"description": "err"}, 500, "server_error"),
         (invalid_grant, {"description": "expired"}, 400, "invalid_grant"),
         (invalid_scope, {"description": "scope"}, 400, "invalid_scope"),
