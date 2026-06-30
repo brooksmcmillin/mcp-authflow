@@ -131,7 +131,7 @@ storage = PostgresTokenStorage(database_url="postgresql://user:pass@host/db")
 storage = PostgresTokenStorage()
 ```
 
-The interface is identical, but `PostgresTokenStorage` does **not** create its schema — `await storage.initialize()` only opens the connection pool. Create the tables yourself before first use (see the [DDL in the README](https://github.com/brooksmcmillin/mcp-authflow#token-storage)).
+The interface is identical, but `PostgresTokenStorage` does **not** create or migrate its schema — `await storage.initialize()` only opens the connection pool. Apply the table DDL yourself (e.g. via your migration tool) before first use; see [the README](https://github.com/brooksmcmillin/mcp-authflow#token-storage) for the full schema.
 
 ## Next steps
 
