@@ -439,3 +439,58 @@ class TestFindSigningKey:
         auth, _ = _create_authenticator(jwks=jwks)
 
         assert auth._find_signing_key(jwks, kid="enc-key", alg="RS256") is None
+
+    def test_ps_algorithm_matches_rsa_key(self) -> None:
+        _, public_key = _generate_rsa_keypair()
+        jwks = _make_jwks_from_public_key(public_key, kid="ps-key")
+        # A JWKS entry advertising no explicit ``alg`` should still serve a PS
+        # request as long as the key type is RSA.
+        del jwks["keys"][0]["alg"]
+        auth, _ = _create_authenticator(jwks=jwks)
+
+        assert auth._find_signing_key(jwks, kid="ps-key", alg="PS256") is not None
+
+    def test_ps_algorithm_rejects_non_rsa_kty(self) -> None:
+        # Defense in depth: a PS request must not match a key whose kty is not
+        # RSA, even if kid/use line up.
+        _, public_key = _generate_rsa_keypair()
+        jwks = _make_jwks_from_public_key(public_key, kid="ec-key")
+        del jwks["keys"][0]["alg"]
+        jwks["keys"][0]["kty"] = "EC"
+        auth, _ = _create_authenticator(jwks=jwks)
+
+        assert auth._find_signing_key(jwks, kid="ec-key", alg="PS256") is None
+
+
+class TestKeyMatches:
+    def test_matches_when_all_criteria_align(self) -> None:
+        key_data = {"kid": "k1", "alg": "RS256", "use": "sig", "kty": "RSA"}
+        assert JWTClientAuthenticator._key_matches(key_data, kid="k1", alg="RS256")
+
+    def test_kid_mismatch(self) -> None:
+        key_data = {"kid": "k1", "kty": "RSA"}
+        assert not JWTClientAuthenticator._key_matches(key_data, kid="k2", alg="RS256")
+
+    def test_alg_mismatch(self) -> None:
+        key_data = {"kid": "k1", "alg": "RS512", "kty": "RSA"}
+        assert not JWTClientAuthenticator._key_matches(key_data, kid="k1", alg="RS256")
+
+    def test_wrong_use(self) -> None:
+        key_data = {"kid": "k1", "use": "enc", "kty": "RSA"}
+        assert not JWTClientAuthenticator._key_matches(key_data, kid="k1", alg="RS256")
+
+    def test_es_requires_ec_kty(self) -> None:
+        key_data = {"kid": "k1", "kty": "RSA"}
+        assert not JWTClientAuthenticator._key_matches(key_data, kid="k1", alg="ES256")
+
+    def test_ps_requires_rsa_kty(self) -> None:
+        key_data = {"kid": "k1", "kty": "EC"}
+        assert not JWTClientAuthenticator._key_matches(key_data, kid="k1", alg="PS256")
+
+    def test_ps_matches_rsa_kty(self) -> None:
+        key_data = {"kid": "k1", "kty": "RSA"}
+        assert JWTClientAuthenticator._key_matches(key_data, kid="k1", alg="PS256")
+
+    def test_no_kid_pinning_when_kid_none(self) -> None:
+        key_data = {"kty": "RSA"}
+        assert JWTClientAuthenticator._key_matches(key_data, kid=None, alg="RS256")
