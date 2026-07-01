@@ -28,6 +28,13 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
   a client into device-flow backoff. Clients that branch on the `error` field of
   a 429 response should match `too_many_requests`.
 
+- Refactored `_verify_jwt` and `_find_signing_key` in the `private_key_jwt`
+  client authenticator to lower cyclomatic complexity (both were CC 14). Signature
+  decoding plus its exception translation now lives in
+  `_decode_and_validate_claims`, and JWKS key selection is driven by a
+  `_key_matches` predicate backed by an algorithm-family→`kty` map. No behavioral
+  change to successful verification.
+
 ### Deprecated
 
 ### Removed
@@ -50,6 +57,10 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
   `fp:<sha256[:8]>` fingerprint (new `mcp_authflow.storage.base.token_fingerprint`
   helper), so a readable debug log no longer shrinks a token's offline search
   space while remaining correlatable across log lines.
+- `private_key_jwt` JWKS key selection now enforces the `kty` guard for `PS*`
+  (RSASSA-PSS) assertions, which previously skipped the key-type check because
+  only `RS*`/`ES*` prefixes were mapped. Defense in depth: a `PS256` assertion
+  will no longer match a non-RSA JWKS entry that happens to share the `kid`.
 - Dynamic Client Registration now validates `redirect_uris` by default,
   rejecting `javascript:`/`data:`/non-loopback `http`/fragment-bearing URIs that
   could enable open-redirect or authorization-code theft. The registration

@@ -56,6 +56,16 @@ BLOCKED_JWT_ALGORITHMS = {
     "HS512",
 }
 
+# Map a JWS algorithm's two-character family prefix to its required JWK ``kty``.
+# ``PS`` (RSASSA-PSS) uses RSA keys just like ``RS``; binding it here keeps the
+# key-type check exhaustive. Add a row (e.g. ``"Ed": "OKP"``) to support a new
+# key family.
+_ALG_PREFIX_TO_KTY = {
+    "RS": "RSA",
+    "ES": "EC",
+    "PS": "RSA",
+}
+
 
 class JWTAuthError(Exception):
     """Raised when private_key_jwt client authentication fails."""
@@ -226,8 +236,41 @@ class JWTClientAuthenticator:
 
         now = time.time()
 
+        payload = self._decode_and_validate_claims(assertion, signing_key, alg, client_id)
+
+        if payload.get("sub") != client_id:
+            raise JWTAuthError(f"Subject mismatch: expected {client_id}, got {payload.get('sub')}")
+
+        iat = payload.get("iat", 0)
+        if now - iat > JWT_MAX_LIFETIME_SECONDS + JWT_MAX_CLOCK_SKEW_SECONDS:
+            raise JWTAuthError("JWT is too old (iat too far in the past)")
+
+        jti: str = payload["jti"]
+        exp = payload.get("exp", now + JWT_MAX_LIFETIME_SECONDS)
+        if self._redis is not None:
+            accepted = await self._check_and_record_jti_redis(jti, exp)
+        else:
+            accepted = self._check_and_record_jti(jti, exp)
+        if not accepted:
+            raise JWTAuthError("JWT replay detected: this token has already been used")
+
+        return payload
+
+    def _decode_and_validate_claims(
+        self,
+        assertion: str,
+        signing_key: AllowedPublicKeys,
+        alg: str,
+        client_id: str,
+    ) -> dict[str, Any]:
+        """Verify the signature and standard claims, returning the payload.
+
+        Wraps :func:`jwt.decode`, translating PyJWT's exception hierarchy into
+        :class:`JWTAuthError`. Raises on an expired, misdirected, mis-issued,
+        malformed, or otherwise invalid assertion.
+        """
         try:
-            payload = jwt.decode(
+            return jwt.decode(
                 assertion,
                 signing_key,
                 algorithms=[alg],
@@ -254,24 +297,6 @@ class JWTClientAuthenticator:
         except jwt.InvalidTokenError as e:
             raise JWTAuthError(f"Invalid JWT: {e}") from e
 
-        if payload.get("sub") != client_id:
-            raise JWTAuthError(f"Subject mismatch: expected {client_id}, got {payload.get('sub')}")
-
-        iat = payload.get("iat", 0)
-        if now - iat > JWT_MAX_LIFETIME_SECONDS + JWT_MAX_CLOCK_SKEW_SECONDS:
-            raise JWTAuthError("JWT is too old (iat too far in the past)")
-
-        jti: str = payload["jti"]
-        exp = payload.get("exp", now + JWT_MAX_LIFETIME_SECONDS)
-        if self._redis is not None:
-            accepted = await self._check_and_record_jti_redis(jti, exp)
-        else:
-            accepted = self._check_and_record_jti(jti, exp)
-        if not accepted:
-            raise JWTAuthError("JWT replay detected: this token has already been used")
-
-        return payload
-
     def _find_signing_key(
         self,
         jwks: dict[str, Any],
@@ -283,21 +308,7 @@ class JWTClientAuthenticator:
             return None
 
         for key_data in keys:
-            if kid and key_data.get("kid") != kid:
-                continue
-
-            key_alg = key_data.get("alg")
-            if key_alg and key_alg != alg:
-                continue
-
-            use = key_data.get("use")
-            if use and use != "sig":
-                continue
-
-            kty = key_data.get("kty")
-            if alg.startswith("RS") and kty != "RSA":
-                continue
-            if alg.startswith("ES") and kty != "EC":
+            if not self._key_matches(key_data, kid, alg):
                 continue
 
             try:
@@ -307,6 +318,30 @@ class JWTClientAuthenticator:
                 continue
 
         return None
+
+    @staticmethod
+    def _key_matches(key_data: dict[str, Any], kid: str | None, alg: str) -> bool:
+        """Return whether a JWKS entry is usable for the requested ``kid``/``alg``.
+
+        Enforces ``kid`` and ``alg`` pinning, restricts to signing keys, and
+        checks the key type against the algorithm family. The prefix→``kty`` map
+        keeps ``kty`` validation exhaustive: ``PS`` (RSASSA-PSS) is bound to
+        ``RSA`` alongside ``RS``, closing a defense-in-depth gap, and new
+        families (e.g. ``OKP``) are a one-line addition.
+        """
+        if kid and key_data.get("kid") != kid:
+            return False
+
+        key_alg = key_data.get("alg")
+        if key_alg and key_alg != alg:
+            return False
+
+        use = key_data.get("use")
+        if use and use != "sig":
+            return False
+
+        expected_kty = _ALG_PREFIX_TO_KTY.get(alg[:2])
+        return expected_kty is None or key_data.get("kty") == expected_kty
 
     def _construct_key(self, key_data: dict[str, Any]) -> AllowedPublicKeys:
         from jwt import PyJWK  # noqa: PLC0415
