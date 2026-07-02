@@ -28,6 +28,14 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
   a client into device-flow backoff. Clients that branch on the `error` field of
   a 429 response should match `too_many_requests`.
 
+- Deduplicated the access/refresh token methods in both storage backends. Each
+  backend now has generic `_store_to` / `_load_from` / `_delete_from` /
+  `_cleanup_from` helpers parameterized by target dict (memory) or table name
+  (postgres), and the Postgres pool guard is centralized in `_require_pool()`.
+  This removes the four near-identical method pairs (and, in Postgres, the
+  repeated pool guard) that had already begun to drift. No behavioral or
+  public-API change.
+
 - Refactored `_verify_jwt` and `_find_signing_key` in the `private_key_jwt`
   client authenticator to lower cyclomatic complexity (both were CC 14). Signature
   decoding plus its exception translation now lives in
