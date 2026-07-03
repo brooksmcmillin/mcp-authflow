@@ -273,6 +273,22 @@ class TestCleanupTimezone:
             "now datetime passed to cleanup query must be timezone-aware"
         )
 
+    @pytest.mark.asyncio
+    async def test_cleanup_expired_tokens_returns_zero_when_nothing_deleted(self) -> None:
+        storage = _make_storage()
+        conn = _mock_conn(execute_return="DELETE 0")
+        _patch_pool(storage, conn)
+
+        assert await storage.cleanup_expired_tokens() == 0
+
+    @pytest.mark.asyncio
+    async def test_cleanup_expired_refresh_tokens_returns_zero_when_nothing_deleted(self) -> None:
+        storage = _make_storage()
+        conn = _mock_conn(execute_return="DELETE 0")
+        _patch_pool(storage, conn)
+
+        assert await storage.cleanup_expired_refresh_tokens() == 0
+
 
 class TestLoadTokenReturnFormat:
     """Verify load methods return correct data shapes."""

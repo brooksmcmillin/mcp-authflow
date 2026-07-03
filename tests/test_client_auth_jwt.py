@@ -222,6 +222,47 @@ class TestAuthenticate:
         assert provider.calls == ["https://client.example.com"]
 
     @pytest.mark.asyncio
+    async def test_non_jwt_error_is_wrapped(self) -> None:
+        # A raw, unexpected failure inside _verify_jwt (e.g. a Redis outage)
+        # must be wrapped in JWTAuthError rather than leaking to the caller.
+        auth, _ = _create_authenticator(jwks={"keys": [{"kid": "k1"}]})
+
+        async def _boom(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+            raise RuntimeError("simulated redis failure")
+
+        auth._verify_jwt = _boom  # type: ignore[method-assign]
+
+        with pytest.raises(JWTAuthError, match="JWT verification failed"):
+            await auth.authenticate(
+                client_id="https://client.example.com",
+                client_assertion="some.jwt.here",
+                client_assertion_type=JWT_CLIENT_ASSERTION_TYPE,
+            )
+
+    @pytest.mark.asyncio
+    async def test_jwt_auth_error_propagates_unwrapped(self) -> None:
+        # A JWTAuthError raised inside _verify_jwt must surface with its original
+        # message, not the generic "JWT verification failed" wrapper.
+        private_key, public_key = _generate_rsa_keypair()
+        jwks = _make_jwks_from_public_key(public_key)
+        auth, _ = _create_authenticator(jwks=jwks)
+
+        client_id = "https://client.example.com"
+        assertion = _sign_jwt(
+            private_key,
+            client_id=client_id,
+            audience=auth.token_endpoint,
+            exp_offset=-600,
+            iat_offset=-900,
+        )
+        with pytest.raises(JWTAuthError, match="expired"):
+            await auth.authenticate(
+                client_id=client_id,
+                client_assertion=assertion,
+                client_assertion_type=JWT_CLIENT_ASSERTION_TYPE,
+            )
+
+    @pytest.mark.asyncio
     async def test_successful_authentication(self) -> None:
         private_key, public_key = _generate_rsa_keypair()
         jwks = _make_jwks_from_public_key(public_key)
@@ -392,6 +433,38 @@ class TestVerifyJWT:
             await auth._verify_jwt(client_id, assertion, jwks)
 
     @pytest.mark.asyncio
+    async def test_malformed_header_rejected(self) -> None:
+        auth, _ = _create_authenticator()
+        with pytest.raises(JWTAuthError, match="Invalid JWT format"):
+            await auth._verify_jwt("client", "not-a-jwt", {"keys": []})
+
+    @pytest.mark.asyncio
+    async def test_no_matching_key_rejected(self) -> None:
+        private_key, public_key = _generate_rsa_keypair()
+        jwks = _make_jwks_from_public_key(public_key, kid="known-key")
+        auth, _ = _create_authenticator(jwks=jwks)
+
+        client_id = "https://client.example.com"
+        assertion = _sign_jwt(private_key, client_id=client_id, kid="unknown-key")
+        with pytest.raises(JWTAuthError, match="No matching key found"):
+            await auth._verify_jwt(client_id, assertion, jwks)
+
+    @pytest.mark.asyncio
+    async def test_corrupted_signature_segment_rejected(self) -> None:
+        private_key, public_key = _generate_rsa_keypair()
+        jwks = _make_jwks_from_public_key(public_key)
+        auth, _ = _create_authenticator(jwks=jwks)
+
+        client_id = "https://client.example.com"
+        assertion = _sign_jwt(private_key, client_id=client_id, audience=auth.token_endpoint)
+        # Replace the signature with non-base64url characters so PyJWT raises a
+        # DecodeError rather than an InvalidSignatureError.
+        header, payload, _ = assertion.split(".")
+        tampered = f"{header}.{payload}.@@@"
+        with pytest.raises(JWTAuthError, match="JWT decode error"):
+            await auth._verify_jwt(client_id, tampered, jwks)
+
+    @pytest.mark.asyncio
     async def test_valid_jwt_returns_payload(self) -> None:
         private_key, public_key = _generate_rsa_keypair()
         jwks = _make_jwks_from_public_key(public_key)
@@ -449,6 +522,15 @@ class TestFindSigningKey:
         auth, _ = _create_authenticator(jwks=jwks)
 
         assert auth._find_signing_key(jwks, kid="ps-key", alg="PS256") is not None
+
+    def test_malformed_jwk_construction_failure_returns_none(self) -> None:
+        # A JWK that matches on kid/alg/use/kty but is missing the RSA key
+        # material (n/e) passes _key_matches yet fails _construct_key; the error
+        # is swallowed and the search moves on, ultimately returning None.
+        jwks = {"keys": [{"kid": "broken", "kty": "RSA", "use": "sig", "alg": "RS256"}]}
+        auth, _ = _create_authenticator(jwks=jwks)
+
+        assert auth._find_signing_key(jwks, kid="broken", alg="RS256") is None
 
     def test_ps_algorithm_rejects_non_rsa_kty(self) -> None:
         # Defense in depth: a PS request must not match a key whose kty is not
