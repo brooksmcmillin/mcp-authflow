@@ -210,6 +210,8 @@ class TestRegisterHandler:
         assert body["client_name"] == "forced-client_secret_post"
         stored = list(registry._clients.values())[0]
         assert stored.client_name == "forced-client_secret_post"
+        # Overriding the name must preserve every other parsed field.
+        assert stored.grant_types == ["client_credentials"]
 
     def test_post_register_hooks_receive_client(self) -> None:
         captured: list[RegisteredClient] = []

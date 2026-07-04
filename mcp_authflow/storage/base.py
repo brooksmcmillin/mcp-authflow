@@ -147,3 +147,12 @@ class TokenStorage(ABC):
             Number of tokens stored
         """
         ...
+
+    @abstractmethod
+    async def get_refresh_token_count(self) -> int:
+        """Get the total number of refresh tokens in storage.
+
+        Returns:
+            Number of refresh tokens stored
+        """
+        ...

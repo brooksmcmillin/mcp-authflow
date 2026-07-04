@@ -12,6 +12,7 @@ injected by the caller.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 from collections.abc import Awaitable, Callable, Iterable, Sequence
@@ -217,7 +218,7 @@ def build_register_handler(
             },
         )
         if client_name_factory is not None:
-            parsed = _replace_client_name(parsed, client_name_factory(parsed))
+            parsed = dataclasses.replace(parsed, client_name=client_name_factory(parsed))
 
         try:
             client = await registry.create_client(parsed)
@@ -274,15 +275,3 @@ def _build_response_body(client: RegisteredClient) -> dict[str, Any]:
         body["client_secret"] = client.client_secret
         body["client_secret_expires_at"] = client.client_secret_expires_at
     return body
-
-
-def _replace_client_name(req: ClientRegistrationRequest, name: str) -> ClientRegistrationRequest:
-    return ClientRegistrationRequest(
-        client_name=name,
-        redirect_uris=req.redirect_uris,
-        grant_types=req.grant_types,
-        response_types=req.response_types,
-        token_endpoint_auth_method=req.token_endpoint_auth_method,
-        scope=req.scope,
-        extra=req.extra,
-    )
