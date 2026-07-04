@@ -519,3 +519,32 @@ class TestGetTokenCount:
         count = await storage.get_token_count()
 
         assert count == 0
+
+    @pytest.mark.asyncio
+    async def test_get_refresh_token_count_raises_when_not_initialized(self) -> None:
+        """get_refresh_token_count raises RuntimeError when pool is None."""
+        storage = PostgresTokenStorage(database_url="postgresql://test:test@localhost/test")
+        with pytest.raises(RuntimeError, match="initialize"):
+            await storage.get_refresh_token_count()
+
+    @pytest.mark.asyncio
+    async def test_get_refresh_token_count_returns_count(self) -> None:
+        """get_refresh_token_count returns integer count from DB."""
+        storage = _make_storage()
+        conn = _mock_conn(fetchrow_return={"count": 7})
+        _patch_pool(storage, conn)
+
+        count = await storage.get_refresh_token_count()
+
+        assert count == 7
+
+    @pytest.mark.asyncio
+    async def test_get_refresh_token_count_returns_zero_when_no_row(self) -> None:
+        """get_refresh_token_count returns 0 when DB returns None."""
+        storage = _make_storage()
+        conn = _mock_conn(fetchrow_return=None)
+        _patch_pool(storage, conn)
+
+        count = await storage.get_refresh_token_count()
+
+        assert count == 0

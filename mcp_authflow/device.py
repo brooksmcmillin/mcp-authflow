@@ -153,6 +153,15 @@ class DevicePollDecisionKind(StrEnum):
     INVALID_GRANT = "invalid_grant"
 
 
+# Terminal ``status`` values map directly to a poll decision; any other status
+# (unknown/corrupt) falls through to ``INVALID_GRANT`` at the call site.
+_STATUS_TO_DECISION_KIND: dict[str, DevicePollDecisionKind] = {
+    DeviceCodeStatus.PENDING.value: DevicePollDecisionKind.AUTHORIZATION_PENDING,
+    DeviceCodeStatus.DENIED.value: DevicePollDecisionKind.ACCESS_DENIED,
+    DeviceCodeStatus.APPROVED.value: DevicePollDecisionKind.APPROVED,
+}
+
+
 @dataclass(frozen=True)
 class DevicePollDecision:
     """Result of a token-endpoint device-code poll.
@@ -217,13 +226,8 @@ def evaluate_device_poll(
                 retry_after=record.interval,
             )
 
-    if record.status == DeviceCodeStatus.PENDING.value:
-        return DevicePollDecision(DevicePollDecisionKind.AUTHORIZATION_PENDING, record=record)
-    if record.status == DeviceCodeStatus.DENIED.value:
-        return DevicePollDecision(DevicePollDecisionKind.ACCESS_DENIED, record=record)
-    if record.status == DeviceCodeStatus.APPROVED.value:
-        return DevicePollDecision(DevicePollDecisionKind.APPROVED, record=record)
-    return DevicePollDecision(DevicePollDecisionKind.INVALID_GRANT, record=record)
+    kind = _STATUS_TO_DECISION_KIND.get(record.status, DevicePollDecisionKind.INVALID_GRANT)
+    return DevicePollDecision(kind, record=record)
 
 
 def build_device_authorization_response(

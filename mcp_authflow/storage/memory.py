@@ -223,3 +223,12 @@ class MemoryTokenStorage(TokenStorage):
             Number of tokens removed
         """
         return self._cleanup_from(self._refresh_tokens, "refresh token")
+
+    async def get_refresh_token_count(self) -> int:
+        """Get the total number of refresh tokens in storage.
+
+        Returns:
+            Number of refresh tokens stored
+        """
+        self._require_initialized()
+        return len(self._refresh_tokens)

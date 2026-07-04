@@ -56,6 +56,8 @@ class TestLifecycle:
             await s.delete_refresh_token("rt")
         with pytest.raises(RuntimeError, match="not initialized"):
             await s.cleanup_expired_refresh_tokens()
+        with pytest.raises(RuntimeError, match="not initialized"):
+            await s.get_refresh_token_count()
 
 
 # ---------------------------------------------------------------------------
@@ -250,3 +252,14 @@ class TestCleanupExpiredRefreshTokens:
         await storage.store_refresh_token("rt1", "c", [], now + 100)
         await storage.store_refresh_token("rt2", "c", [], now + 200)
         assert await storage.cleanup_expired_refresh_tokens() == 0
+
+
+class TestGetRefreshTokenCount:
+    async def test_count_reflects_stored_refresh_tokens(self, storage: MemoryTokenStorage) -> None:
+        assert await storage.get_refresh_token_count() == 0
+        await storage.store_refresh_token("rt1", "c", [], int(time.time()) + 100)
+        assert await storage.get_refresh_token_count() == 1
+        await storage.store_refresh_token("rt2", "c", [], int(time.time()) + 100)
+        assert await storage.get_refresh_token_count() == 2
+        await storage.delete_refresh_token("rt1")
+        assert await storage.get_refresh_token_count() == 1

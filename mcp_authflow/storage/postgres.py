@@ -289,3 +289,15 @@ class PostgresTokenStorage(TokenStorage):
             Number of tokens removed
         """
         return await self._cleanup_from("mcp_refresh_tokens", "refresh token")
+
+    async def get_refresh_token_count(self) -> int:
+        """Get the total number of refresh tokens in storage.
+
+        Returns:
+            Number of refresh tokens stored
+        """
+        pool = self._require_pool()
+
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT COUNT(*) as count FROM mcp_refresh_tokens")
+        return row["count"] if row else 0
