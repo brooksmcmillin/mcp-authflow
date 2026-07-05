@@ -82,6 +82,10 @@ nav:
   - API Reference:
       - api/index.md
       - Storage: api/storage.md
+      - Registration: api/registration.md
+      - Client Authentication: api/client-auth.md
+      - PKCE: api/pkce.md
+      - Device Flow: api/device.md
       - Responses: api/responses.md
       - Rate Limiting: api/rate-limiting.md
       - Validation: api/validation.md
