@@ -236,18 +236,30 @@ Token data returned by `load_token()`:
 
 ### OAuth Error Responses
 
-Standardized error helpers following RFC 6749:
+Standardized error helpers following RFC 6749 (and the device-flow /
+registration extensions). Each returns a ready-to-send Starlette
+`JSONResponse`:
 
 ```python
 from mcp_authflow.responses import (
-    invalid_request,       # 400 - Missing/invalid parameters
-    invalid_client,        # 401 - Authentication failure
-    invalid_grant,         # 400 - Expired/invalid code or token
-    invalid_scope,         # 400 - Scope violation
-    slow_down,             # 400 - Device flow rate limiting
-    rate_limit_exceeded,   # 429 - Too many requests
-    server_error,          # 500 - Internal error
-    backend_timeout,       # 504 - Upstream timeout
+    oauth_error,               # helper the others build on (default 400)
+    invalid_request,           # 400 - Missing/invalid parameters
+    invalid_client,            # 401 - Authentication failure
+    invalid_grant,             # 400 - Expired/invalid code or token
+    invalid_scope,             # 400 - Scope violation
+    unsupported_grant_type,    # 400 - Unsupported grant_type (RFC 6749 §5.2)
+    access_denied,             # 400 - User/AS denied the request
+    invalid_redirect_uri,      # 400 - Bad redirect_uri (RFC 7591 §3.2.2)
+    authorization_pending,     # 400 - Device flow: keep polling (RFC 8628 §3.5)
+    slow_down,                 # 400 or 429 - Device flow: poll slower
+    expired_token,             # 400 - Device flow: device_code expired
+    pkce_required,             # 400 - PKCE is required for this client
+    rate_limit_exceeded,       # 429 - Too many requests
+    server_error,              # 500 (or 502/504) - Internal error
+    backend_timeout,           # 504 - Upstream timeout
+    backend_connection_error,  # 502 - Upstream connection failure
+    backend_invalid_response,  # 502 - Malformed upstream response
+    backend_oauth_error,       # passthrough of an upstream OAuth error dict
 )
 ```
 

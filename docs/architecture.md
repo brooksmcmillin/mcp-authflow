@@ -47,6 +47,10 @@ OAuth 2.0 separates authorization (who is the caller, what can they do) from res
 | Module | Responsibility |
 |---|---|
 | [`storage`](api/storage.md) | Persist access and refresh tokens (memory or PostgreSQL). |
+| [`registration`](api/registration.md) | RFC 7591 Dynamic Client Registration handler and registry. |
+| [`client_auth`](api/client-auth.md) | RFC 7523 `private_key_jwt` client authentication. |
+| [`pkce`](api/pkce.md) | RFC 7636 PKCE verification and validation. |
+| [`device`](api/device.md) | RFC 8628 Device Authorization Grant primitives. |
 | [`responses`](api/responses.md) | RFC 6749 error response helpers. |
 | [`rate_limiting`](api/rate-limiting.md) | Sliding-window limits for the token endpoint. |
 | [`validation`](api/validation.md) | Input sanitization for client IDs, scopes, etc. |
