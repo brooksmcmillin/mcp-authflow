@@ -6,4 +6,9 @@ endpoints. Clients sign a JWT with their private key and submit it as a
 resolved through a pluggable `JWKSProvider`, with an asymmetric-only algorithm
 allowlist and `jti` replay protection.
 
+For a shared replay cache, pass any object satisfying
+[`mcp_authflow.client_auth.AsyncRedisClient`][]. This protocol requires only
+the Redis `SET` operation used by replay protection; it is intentionally
+separate from the sorted-set protocol used by the rate limiter.
+
 ::: mcp_authflow.client_auth

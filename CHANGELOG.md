@@ -12,12 +12,28 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## 0.7.0
+
+### Added
+
 - `build_register_handler` gained three Dynamic Client Registration hardening
   hooks: `auth_validator` (RFC 7591 §3.1 initial-access-token gate, returns
   `401` on failure), `redirect_uri_validator` (defaults to an https-only policy
   with an http loopback exception per OAuth 2.1 §9.7; overridable or
   disable-able), and `get_client_ip` (resolve the rate-limit key from a trusted
   proxy header instead of the direct TCP peer).
+- `TokenStorage`, `MemoryTokenStorage`, and `PostgresTokenStorage` now expose
+  async `get_refresh_token_count()` for refresh-token inventory.
 
 ### Changed
 
@@ -43,9 +59,16 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
   `_key_matches` predicate backed by an algorithm-family→`kty` map. No behavioral
   change to successful verification.
 
-### Deprecated
+- `generate_user_code()` now rejects configurations with less than 20 bits of
+  entropy, as recommended by RFC 8628 section 6.1. Callers using unusually short
+  custom code formats must increase `groups` or `group_size`.
 
-### Removed
+- Custom `TokenStorage` subclasses must now implement
+  `get_refresh_token_count()` because it is part of the abstract storage
+  interface; subclasses that omit it can no longer be instantiated.
+
+- `mcp_authflow.__version__` is now read from installed distribution metadata.
+  Imports directly from an uninstalled source tree report `0.0.0+unknown`.
 
 ### Fixed
 
@@ -60,6 +83,12 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Security
 
+- Raised the Starlette runtime dependency floor to `1.0.1` to include the fix
+  for PYSEC-2026-161, a Host-header authentication bypass.
+- CORS responses now include `Vary: Origin` so shared caches cannot reuse an
+  allowed origin for a different requester, and preflight responses restrict
+  `Access-Control-Allow-Headers` to `Authorization`, `Content-Type`, and
+  `Accept` instead of allowing every header.
 - Token lifecycle DEBUG logs no longer emit a raw `token[:20]` prefix. Both the
   in-memory and PostgreSQL storage backends now log a non-reversible
   `fp:<sha256[:8]>` fingerprint (new `mcp_authflow.storage.base.token_fingerprint`

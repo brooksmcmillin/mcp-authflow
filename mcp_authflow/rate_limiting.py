@@ -3,13 +3,36 @@
 import secrets
 import time
 from collections import defaultdict
-from typing import Any
-
-from mcp_authflow._redis_protocol import AsyncRedisClient
+from typing import Any, Protocol
 
 __all__ = ["AsyncRedisClient", "SlidingWindowRateLimiter"]
 
 _REDIS_RATELIMIT_PREFIX = "mcp_auth:ratelimit:"
+
+
+class AsyncRedisClient(Protocol):
+    """Minimal async Redis interface used for rate-limit storage."""
+
+    async def zadd(self, name: str, mapping: dict[str | bytes, float], **kwargs: Any) -> int: ...  # noqa: ANN401
+
+    async def zremrangebyscore(
+        self,
+        name: str,
+        min: float | str,
+        max: float | str,  # noqa: A002
+    ) -> int: ...
+
+    async def zcard(self, name: str) -> int: ...
+
+    async def expire(self, name: str, time: int) -> bool: ...
+
+    async def zrange(
+        self,
+        name: str,
+        start: int,
+        end: int,
+        withscores: bool = False,
+    ) -> list[Any]: ...
 
 
 class SlidingWindowRateLimiter:

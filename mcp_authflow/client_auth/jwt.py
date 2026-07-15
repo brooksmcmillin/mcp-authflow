@@ -27,8 +27,6 @@ from typing import Any, Protocol, cast
 import jwt
 from jwt.algorithms import AllowedPublicKeys
 
-from mcp_authflow._redis_protocol import AsyncRedisClient
-
 logger = logging.getLogger(__name__)
 
 JWT_CLIENT_ASSERTION_TYPE = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
@@ -83,6 +81,20 @@ class JWKSProvider(Protocol):
     """
 
     async def get_jwks(self, client_id: str) -> dict[str, Any] | None: ...
+
+
+class AsyncRedisClient(Protocol):
+    """Minimal async Redis interface used for JTI replay-cache storage."""
+
+    async def set(
+        self,
+        name: str,
+        value: str | bytes | int,
+        *,
+        nx: bool = False,
+        px: int | None = None,
+        **kwargs: Any,  # noqa: ANN401
+    ) -> bool | None: ...
 
 
 class JWTClientAuthenticator:
