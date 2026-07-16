@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from mcp_authflow.storage.base import hash_token
 from mcp_authflow.storage.postgres import PostgresTokenStorage
 
 
@@ -359,6 +360,77 @@ class TestLoadTokenReturnFormat:
 
         assert result is not None
         assert result["created_at"] is None
+
+
+class TestTokenHashedAtRest:
+    """Verify tokens are persisted and looked up by digest, never as plaintext."""
+
+    @pytest.mark.asyncio
+    async def test_store_token_persists_digest_not_plaintext(self) -> None:
+        storage = _make_storage()
+        conn = _mock_conn()
+        _patch_pool(storage, conn)
+
+        await storage.store_token(
+            token="secret-access",  # noqa: S106
+            client_id="client1",
+            scopes=["read"],
+            expires_at=int(datetime.now(UTC).timestamp()) + 3600,
+        )
+
+        args = conn.execute.call_args[0]
+        assert args[1] == hash_token("secret-access")
+        assert "secret-access" not in args
+
+    @pytest.mark.asyncio
+    async def test_store_refresh_token_persists_digest_not_plaintext(self) -> None:
+        storage = _make_storage()
+        conn = _mock_conn()
+        _patch_pool(storage, conn)
+
+        await storage.store_refresh_token(
+            refresh_token="secret-refresh",  # noqa: S106
+            client_id="client1",
+            scopes=["read"],
+            expires_at=int(datetime.now(UTC).timestamp()) + 86400,
+        )
+
+        args = conn.execute.call_args[0]
+        assert args[1] == hash_token("secret-refresh")
+        assert "secret-refresh" not in args
+
+    @pytest.mark.asyncio
+    async def test_load_token_looks_up_by_digest(self) -> None:
+        storage = _make_storage()
+        future = datetime.now(UTC) + timedelta(hours=1)
+        row = {
+            "client_id": "client1",
+            "scopes": "read",
+            "resource": None,
+            "expires_at": future,
+            "created_at": datetime.now(UTC),
+            "user_id": 1,
+        }
+        conn = _mock_conn(fetchrow_return=row)
+        _patch_pool(storage, conn)
+
+        result = await storage.load_token("secret-access")
+
+        # Lookup happens on the digest, never the raw token.
+        assert conn.fetchrow.call_args[0][1] == hash_token("secret-access")
+        # The raw token the caller passed is echoed back, not the stored digest.
+        assert result is not None
+        assert result["token"] == "secret-access"  # noqa: S105
+
+    @pytest.mark.asyncio
+    async def test_delete_token_targets_digest(self) -> None:
+        storage = _make_storage()
+        conn = _mock_conn()
+        _patch_pool(storage, conn)
+
+        await storage.delete_token("secret-access")
+
+        assert conn.execute.call_args[0][1] == hash_token("secret-access")
 
 
 class TestInitialize:

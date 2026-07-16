@@ -15,7 +15,7 @@ except ImportError as _exc:
         "PostgresTokenStorage requires asyncpg. Install it with: pip install mcp-authflow[postgres]"
     ) from _exc
 
-from mcp_authflow.storage.base import TokenStorage, token_fingerprint
+from mcp_authflow.storage.base import TokenStorage, hash_token, token_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +77,8 @@ class PostgresTokenStorage(TokenStorage):
         expires_datetime = datetime.fromtimestamp(expires_at, tz=UTC)
         scopes_str = " ".join(scopes)
 
+        # The token is stored as a non-reversible SHA-256 digest so a database
+        # compromise does not yield replayable credentials (CWE-312 / CWE-522).
         # ``table`` is always an internal literal (see the public wrappers below),
         # never caller-supplied, so the interpolation is not an injection vector.
         query = f"""
@@ -93,7 +95,7 @@ class PostgresTokenStorage(TokenStorage):
         async with pool.acquire() as conn:
             await conn.execute(
                 query,
-                token,
+                hash_token(token),
                 client_id,
                 scopes_str,
                 resource,
@@ -106,14 +108,15 @@ class PostgresTokenStorage(TokenStorage):
         """Load a token record from the given table, dropping it if expired."""
         pool = self._require_pool()
 
+        # Tokens are keyed by their SHA-256 digest at rest; look up by digest.
         # ``table`` is always an internal literal (see the public wrappers below).
         query = f"""
-            SELECT token, client_id, scopes, resource, expires_at, created_at, user_id
+            SELECT client_id, scopes, resource, expires_at, created_at, user_id
             FROM {table}
             WHERE token = $1
         """  # nosec B608
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(query, token)
+            row = await conn.fetchrow(query, hash_token(token))
 
         if not row:
             logger.debug(
@@ -130,7 +133,7 @@ class PostgresTokenStorage(TokenStorage):
             return None
 
         return {
-            "token": row["token"],
+            "token": token,
             "client_id": row["client_id"],
             "scopes": row["scopes"].split() if row["scopes"] else [],
             "resource": row["resource"],
@@ -146,7 +149,7 @@ class PostgresTokenStorage(TokenStorage):
         # ``table`` is always an internal literal (see the public wrappers below).
         query = f"DELETE FROM {table} WHERE token = $1"  # nosec B608
         async with pool.acquire() as conn:
-            await conn.execute(query, token)
+            await conn.execute(query, hash_token(token))
         logger.debug("Deleted %s %s", label, token_fingerprint(token))
 
     async def _cleanup_from(self, table: str, label: str) -> int:

@@ -22,6 +22,14 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Security
 
+- Token storage now hashes access and refresh tokens at rest. Both
+  `PostgresTokenStorage` and `MemoryTokenStorage` key records on the SHA-256
+  digest of the token instead of the raw secret, so a database compromise no
+  longer yields directly replayable credentials (CWE-312 / CWE-522). The public
+  `store_token` / `load_token` API is unchanged — hashing is internal. This is a
+  breaking change to the persisted PostgreSQL schema (the `token` column now
+  holds a 64-character digest); see the README for migration guidance.
+
 ## 0.7.0
 
 ### Added
