@@ -4,6 +4,7 @@ import time
 
 import pytest
 
+from mcp_authflow.storage.base import hash_token
 from mcp_authflow.storage.memory import MemoryTokenStorage
 
 
@@ -121,7 +122,21 @@ class TestStoreAndLoadToken:
         result = await storage.load_token("expired_tok")
         assert result is None
         # Expired token should have been removed from internal dict
-        assert "expired_tok" not in storage._access_tokens
+        assert hash_token("expired_tok") not in storage._access_tokens
+
+
+class TestTokenHashedAtRest:
+    """Verify tokens are keyed by digest, mirroring the PostgreSQL backend."""
+
+    async def test_access_token_keyed_by_digest(self, storage: MemoryTokenStorage) -> None:
+        await storage.store_token("secret-access", "c", ["read"], int(time.time()) + 3600)
+        assert "secret-access" not in storage._access_tokens
+        assert hash_token("secret-access") in storage._access_tokens
+
+    async def test_refresh_token_keyed_by_digest(self, storage: MemoryTokenStorage) -> None:
+        await storage.store_refresh_token("secret-refresh", "c", ["read"], int(time.time()) + 3600)
+        assert "secret-refresh" not in storage._refresh_tokens
+        assert hash_token("secret-refresh") in storage._refresh_tokens
 
 
 class TestDeleteToken:
@@ -149,8 +164,8 @@ class TestCleanupExpiredTokens:
         count = await storage.cleanup_expired_tokens()
         assert count == 2
         assert await storage.load_token("valid") is not None
-        assert "expired1" not in storage._access_tokens
-        assert "expired2" not in storage._access_tokens
+        assert hash_token("expired1") not in storage._access_tokens
+        assert hash_token("expired2") not in storage._access_tokens
 
     async def test_returns_zero_when_all_valid(self, storage: MemoryTokenStorage) -> None:
         now = int(time.time())
@@ -206,7 +221,7 @@ class TestStoreAndLoadRefreshToken:
         await storage.store_refresh_token("expired_rt", "c", [], expires_at)
         result = await storage.load_refresh_token("expired_rt")
         assert result is None
-        assert "expired_rt" not in storage._refresh_tokens
+        assert hash_token("expired_rt") not in storage._refresh_tokens
 
     async def test_load_returns_copy(self, storage: MemoryTokenStorage) -> None:
         """Returned dict is a shallow copy — replacing a top-level key does not affect storage."""
@@ -244,8 +259,8 @@ class TestCleanupExpiredRefreshTokens:
         count = await storage.cleanup_expired_refresh_tokens()
         assert count == 2
         assert await storage.load_refresh_token("valid_rt") is not None
-        assert "exp_rt1" not in storage._refresh_tokens
-        assert "exp_rt2" not in storage._refresh_tokens
+        assert hash_token("exp_rt1") not in storage._refresh_tokens
+        assert hash_token("exp_rt2") not in storage._refresh_tokens
 
     async def test_returns_zero_when_all_valid(self, storage: MemoryTokenStorage) -> None:
         now = int(time.time())

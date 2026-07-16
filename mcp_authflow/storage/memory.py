@@ -4,7 +4,7 @@ import logging
 import time
 from typing import Any
 
-from mcp_authflow.storage.base import TokenStorage, token_fingerprint
+from mcp_authflow.storage.base import TokenStorage, hash_token, token_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +50,13 @@ class MemoryTokenStorage(TokenStorage):
         user_id: int | None,
         label: str,
     ) -> None:
-        """Store a token record into the given dict."""
+        """Store a token record into the given dict.
+
+        Records are keyed by the token's non-reversible digest, mirroring the
+        PostgreSQL backend so the raw secret is never used as a lookup key.
+        """
         self._require_initialized()
-        store[token] = {
+        store[hash_token(token)] = {
             "token": token,
             "client_id": client_id,
             "scopes": scopes.copy(),
@@ -72,7 +76,7 @@ class MemoryTokenStorage(TokenStorage):
         """Load a token record from the given dict, dropping it if expired."""
         self._require_initialized()
 
-        token_data = store.get(token)
+        token_data = store.get(hash_token(token))
         if not token_data:
             logger.debug("%s %s not found in memory", label.capitalize(), token_fingerprint(token))
             return None
@@ -89,8 +93,9 @@ class MemoryTokenStorage(TokenStorage):
         """Delete a token record from the given dict."""
         self._require_initialized()
 
-        if token in store:
-            del store[token]
+        digest = hash_token(token)
+        if digest in store:
+            del store[digest]
             logger.debug("Deleted %s %s", label, token_fingerprint(token))
 
     def _cleanup_from(self, store: dict[str, dict[str, Any]], label: str) -> int:
@@ -98,12 +103,12 @@ class MemoryTokenStorage(TokenStorage):
         self._require_initialized()
 
         now = int(time.time())
-        expired_tokens = [token for token, data in store.items() if data["expires_at"] < now]
+        expired_keys = [key for key, data in store.items() if data["expires_at"] < now]
 
-        for token in expired_tokens:
-            del store[token]
+        for key in expired_keys:
+            del store[key]
 
-        count = len(expired_tokens)
+        count = len(expired_keys)
         if count > 0:
             logger.info("Cleaned up %s expired %ss", count, label)
         return count

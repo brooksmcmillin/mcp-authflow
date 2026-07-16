@@ -185,7 +185,7 @@ DDL (e.g. via your migration tool) before first use:
 
 ```sql
 CREATE TABLE IF NOT EXISTS mcp_access_tokens (
-    token       TEXT PRIMARY KEY,
+    token       TEXT PRIMARY KEY,  -- SHA-256 digest of the access token, not the raw value
     client_id   TEXT NOT NULL,
     scopes      TEXT NOT NULL DEFAULT '',
     resource    TEXT,
@@ -196,7 +196,7 @@ CREATE TABLE IF NOT EXISTS mcp_access_tokens (
 
 -- Only needed if you use the refresh-token methods.
 CREATE TABLE IF NOT EXISTS mcp_refresh_tokens (
-    token       TEXT PRIMARY KEY,
+    token       TEXT PRIMARY KEY,  -- SHA-256 digest of the refresh token, not the raw value
     client_id   TEXT NOT NULL,
     scopes      TEXT NOT NULL DEFAULT '',
     resource    TEXT,
@@ -205,6 +205,15 @@ CREATE TABLE IF NOT EXISTS mcp_refresh_tokens (
     user_id     INTEGER
 );
 ```
+
+Tokens are hashed at rest: the `token` column holds the SHA-256 hex digest of
+the token, never the raw secret, so a database compromise does not leak
+replayable credentials. Hashing is internal — the `store_token` / `load_token`
+API still takes and returns the raw token. If you are upgrading a deployment
+that previously stored raw tokens, treat this as a breaking schema change: the
+digest is 64 hex characters, so existing rows will no longer match on lookup.
+Perform an expand-contract migration (rehash existing tokens, or expire and
+reissue them) as part of the upgrade.
 
 **Storage interface:**
 

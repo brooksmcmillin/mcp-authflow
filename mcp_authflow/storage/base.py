@@ -22,6 +22,24 @@ def token_fingerprint(token: str) -> str:
     return "fp:" + hashlib.sha256(token.encode()).hexdigest()[:8]
 
 
+def hash_token(token: str) -> str:
+    """Return the non-reversible digest used to store and look up a token.
+
+    Storage backends key tokens on this digest rather than the raw secret so a
+    database compromise (backup leak, read replica, or SQLi in a consuming app)
+    does not yield directly replayable credentials (CWE-312 / CWE-522). Tokens
+    are high-entropy, so an unsalted SHA-256 is sufficient and keeps lookups a
+    single indexed equality match.
+
+    Args:
+        token: The secret token to digest.
+
+    Returns:
+        The SHA-256 hex digest of the token.
+    """
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 class TokenStorage(ABC):
     """Abstract interface for MCP token storage."""
 
