@@ -35,6 +35,14 @@ JWT_MAX_CLOCK_SKEW_SECONDS = 60
 JWT_MAX_LIFETIME_SECONDS = 300
 JWT_REPLAY_CACHE_CLEANUP_INTERVAL = 60
 
+# Longest a replay-cache entry ever needs to live. A re-presented assertion is
+# independently rejected by the ``iat``-age check once it is older than
+# ``JWT_MAX_LIFETIME_SECONDS + JWT_MAX_CLOCK_SKEW_SECONDS``, so tracking a ``jti``
+# beyond that window serves no purpose. Capping here prevents an authenticated
+# client from pinning entries in the cache with an attacker-controlled ``exp``
+# far in the future (CWE-770 / unbounded resource growth).
+JWT_REPLAY_CACHE_MAX_TTL_SECONDS = JWT_MAX_LIFETIME_SECONDS + JWT_MAX_CLOCK_SKEW_SECONDS
+
 _REDIS_JTI_PREFIX = "mcp_authflow:jti:"
 
 ALLOWED_JWT_ALGORITHMS = {
@@ -148,10 +156,14 @@ class JWTClientAuthenticator:
         """Record a JTI in the in-memory cache. Returns False if seen before."""
         self._cleanup_expired_jtis()
 
+        # Cap the tracked expiry so an attacker-controlled ``exp`` can't keep an
+        # entry alive past the window in which a replay could still be accepted.
+        capped_exp = min(exp, time.time() + JWT_REPLAY_CACHE_MAX_TTL_SECONDS)
+
         with self._jti_lock:
             if jti in self._used_jtis:
                 return False
-            self._used_jtis[jti] = exp
+            self._used_jtis[jti] = capped_exp
             return True
 
     async def _check_and_record_jti_redis(self, jti: str, exp: float) -> bool:
@@ -161,6 +173,9 @@ class JWTClientAuthenticator:
         """
         now = time.time()
         ttl_seconds = max(0.0, exp - now) + JWT_MAX_CLOCK_SKEW_SECONDS
+        # Cap the TTL so an attacker-controlled ``exp`` far in the future can't
+        # grow the replay cache without bound (see JWT_REPLAY_CACHE_MAX_TTL_SECONDS).
+        ttl_seconds = min(ttl_seconds, JWT_REPLAY_CACHE_MAX_TTL_SECONDS)
         ttl_ms = math.ceil(ttl_seconds * 1000)
 
         key = f"{_REDIS_JTI_PREFIX}{jti}"

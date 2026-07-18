@@ -12,6 +12,7 @@ from mcp_authflow.client_auth import (
     ALLOWED_JWT_ALGORITHMS,
     BLOCKED_JWT_ALGORITHMS,
     JWT_CLIENT_ASSERTION_TYPE,
+    JWT_REPLAY_CACHE_MAX_TTL_SECONDS,
     AsyncRedisClient,
     JWKSProvider,
     JWTAuthError,
@@ -120,6 +121,23 @@ class TestJTIReplayProtection:
         auth._cleanup_expired_jtis()
         assert "old-jti" not in auth._used_jtis
 
+    def test_far_future_exp_is_capped(self) -> None:
+        # A validly-signed client could set exp years out; the tracked expiry
+        # must be capped so the entry can't linger in the cache indefinitely.
+        auth, _ = _create_authenticator()
+        before = time.time()
+        auth._check_and_record_jti("far-future", time.time() + 10 * 365 * 24 * 3600)
+        stored = auth._used_jtis["far-future"]
+        assert stored <= before + JWT_REPLAY_CACHE_MAX_TTL_SECONDS + 1
+
+    def test_near_exp_is_not_extended(self) -> None:
+        # A short-lived assertion should keep its own (smaller) expiry, not be
+        # bumped up to the cap.
+        auth, _ = _create_authenticator()
+        exp = time.time() + 30
+        auth._check_and_record_jti("short-lived", exp)
+        assert auth._used_jtis["short-lived"] == exp
+
 
 class TestRedisJTIReplayProtection:
     @pytest.fixture
@@ -144,6 +162,15 @@ class TestRedisJTIReplayProtection:
         await auth._check_and_record_jti_redis("ttl-jti", time.time() + 300)
         ttl = await fake_redis.pttl("mcp_authflow:jti:ttl-jti")
         assert ttl > 0
+
+    @pytest.mark.asyncio
+    async def test_far_future_exp_ttl_is_capped(self, fake_redis: Any) -> None:
+        # An attacker-controlled exp far in the future must not translate into
+        # an equally long Redis TTL (CWE-770 / unbounded cache growth).
+        auth, _ = _create_authenticator(redis=cast(AsyncRedisClient, fake_redis))
+        await auth._check_and_record_jti_redis("huge-ttl", time.time() + 10 * 365 * 24 * 3600)
+        ttl_ms = await fake_redis.pttl("mcp_authflow:jti:huge-ttl")
+        assert 0 < ttl_ms <= (JWT_REPLAY_CACHE_MAX_TTL_SECONDS + 1) * 1000
 
     @pytest.mark.asyncio
     async def test_cross_instance_replay_detected_via_redis(self, fake_redis: Any) -> None:
