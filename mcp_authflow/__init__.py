@@ -50,6 +50,7 @@ from mcp_authflow.device import (
 )
 from mcp_authflow.pkce import (
     ALLOWED_CODE_CHALLENGE_METHODS,
+    S256_ONLY_CODE_CHALLENGE_METHODS,
     validate_code_challenge,
     validate_code_challenge_method,
     validate_code_verifier,
@@ -146,6 +147,7 @@ __all__ = [
     "validate_client_id",
     # PKCE (RFC 7636)
     "ALLOWED_CODE_CHALLENGE_METHODS",
+    "S256_ONLY_CODE_CHALLENGE_METHODS",
     "validate_code_challenge",
     "validate_code_challenge_method",
     "validate_code_verifier",

@@ -22,6 +22,14 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Security
 
+- The PKCE helpers gained an opt-in S256-only policy: `verify_pkce` and
+  `validate_code_challenge_method` accept `allow_plain=False` to reject the
+  `plain` method, which OAuth 2.1 and RFC 9700 deprecate (CWE-757). The new
+  `S256_ONLY_CODE_CHALLENGE_METHODS` constant mirrors
+  `ALLOWED_CODE_CHALLENGE_METHODS` for metadata/capability advertisement.
+  Defaults are unchanged — `plain` is still accepted unless the flag is
+  passed — but servers SHOULD opt in unless a legacy client genuinely cannot
+  compute S256. ([#44](https://github.com/brooksmcmillin/mcp-authflow/issues/44))
 - Token storage now hashes access and refresh tokens at rest. Both
   `PostgresTokenStorage` and `MemoryTokenStorage` key records on the SHA-256
   digest of the token instead of the raw secret, so a database compromise no

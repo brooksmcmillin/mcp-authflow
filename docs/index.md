@@ -12,7 +12,7 @@ OAuth 2.0 **Authorization Server** framework for [MCP](https://modelcontextproto
 - **Input validation** for client IDs and scopes
 - **RFC 7591 Dynamic Client Registration** handler with a pluggable client registry
 - **RFC 7523 `private_key_jwt`** client authentication with an algorithm allowlist and replay protection
-- **RFC 7636 PKCE** verification (`S256` + `plain`) and input validation
+- **RFC 7636 PKCE** verification (`S256` + `plain`, with an opt-in S256-only policy) and input validation
 - **RFC 8628 Device Authorization Grant** — sans-IO polling state machine and code generators
 - **CORS helpers** with origin allowlisting
 - **Async-first** design, built on Starlette
