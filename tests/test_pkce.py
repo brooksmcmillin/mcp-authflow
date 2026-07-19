@@ -7,6 +7,7 @@ import pytest
 
 from mcp_authflow.pkce import (
     ALLOWED_CODE_CHALLENGE_METHODS,
+    S256_ONLY_CODE_CHALLENGE_METHODS,
     validate_code_challenge,
     validate_code_challenge_method,
     validate_code_verifier,
@@ -35,6 +36,19 @@ class TestValidateCodeChallengeMethod:
 
     def test_constant_exposes_methods(self) -> None:
         assert frozenset({"S256", "plain"}) == ALLOWED_CODE_CHALLENGE_METHODS
+
+    def test_s256_only_constant(self) -> None:
+        assert frozenset({"S256"}) == S256_ONLY_CODE_CHALLENGE_METHODS
+
+    def test_s256_only_policy_accepts_s256(self) -> None:
+        assert validate_code_challenge_method("S256", allow_plain=False) is True
+
+    def test_s256_only_policy_rejects_plain(self) -> None:
+        assert validate_code_challenge_method("plain", allow_plain=False) is False
+
+    @pytest.mark.parametrize("method", ["", "s256", "S512", "none", None])
+    def test_s256_only_policy_rejects_unknown(self, method: str | None) -> None:
+        assert validate_code_challenge_method(method, allow_plain=False) is False
 
 
 class TestValidateCodeVerifier:
@@ -96,3 +110,9 @@ class TestVerifyPkce:
     @pytest.mark.parametrize("method", ["", "s256", "S512", "PLAIN", "none"])
     def test_unknown_method_returns_false(self, method: str) -> None:
         assert verify_pkce(VERIFIER, CHALLENGE_S256, method) is False
+
+    def test_s256_only_policy_still_verifies_s256(self) -> None:
+        assert verify_pkce(VERIFIER, CHALLENGE_S256, "S256", allow_plain=False) is True
+
+    def test_s256_only_policy_rejects_plain_match(self) -> None:
+        assert verify_pkce(VERIFIER, VERIFIER, "plain", allow_plain=False) is False

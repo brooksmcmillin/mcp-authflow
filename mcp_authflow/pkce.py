@@ -8,6 +8,12 @@ Authorization-server-side primitives for Proof Key for Code Exchange:
   sanitization per RFC 7636 §4.1/§4.2 (length 43-128, unreserved charset).
 - :func:`validate_code_challenge_method` — method allowlist (``S256``, ``plain``).
 
+OAuth 2.1 and RFC 9700 deprecate ``plain`` (it offers no protection when the
+authorization request is observed). Both :func:`verify_pkce` and
+:func:`validate_code_challenge_method` accept ``allow_plain=False`` to enforce
+an S256-only policy; servers SHOULD pass it unless a legacy client genuinely
+cannot compute S256.
+
 Client-side ``code_verifier``/``code_challenge`` generation is intentionally
 out of scope for this module; mcp-authflow is an authorization-server
 framework.
@@ -22,6 +28,7 @@ S256 = "S256"
 PLAIN = "plain"
 
 ALLOWED_CODE_CHALLENGE_METHODS: frozenset[str] = frozenset({S256, PLAIN})
+S256_ONLY_CODE_CHALLENGE_METHODS: frozenset[str] = frozenset({S256})
 
 # RFC 7636: code_verifier = 43*128 unreserved, where unreserved is
 # ALPHA / DIGIT / "-" / "." / "_" / "~". The same charset applies to
@@ -30,15 +37,21 @@ ALLOWED_CODE_CHALLENGE_METHODS: frozenset[str] = frozenset({S256, PLAIN})
 _PKCE_CHARSET = re.compile(r"^[A-Za-z0-9._~\-]{43,128}$")
 
 
-def validate_code_challenge_method(method: str | None) -> bool:
+def validate_code_challenge_method(method: str | None, *, allow_plain: bool = True) -> bool:
     """Return True if ``method`` is an allowed PKCE method.
 
-    Per RFC 7636 the registered methods are ``plain`` and ``S256``. Servers
-    SHOULD reject ``plain`` for public clients; this helper only checks the
-    syntactic allowlist — enforcement of S256-only policy is the caller's
-    responsibility.
+    Per RFC 7636 the registered methods are ``plain`` and ``S256``, but OAuth
+    2.1 and RFC 9700 deprecate ``plain``. Pass ``allow_plain=False`` to
+    enforce an S256-only policy at the ``/authorize`` step; the default keeps
+    the full RFC 7636 allowlist for backward compatibility.
+
+    Args:
+        method: The ``code_challenge_method`` from the authorization request.
+        allow_plain: Whether ``plain`` counts as allowed. Set to ``False``
+            to require S256.
     """
-    return method in ALLOWED_CODE_CHALLENGE_METHODS
+    allowed = ALLOWED_CODE_CHALLENGE_METHODS if allow_plain else S256_ONLY_CODE_CHALLENGE_METHODS
+    return method in allowed
 
 
 def validate_code_verifier(code_verifier: str) -> bool:
@@ -60,7 +73,9 @@ def validate_code_challenge(code_challenge: str) -> bool:
     return bool(_PKCE_CHARSET.match(code_challenge))
 
 
-def verify_pkce(code_verifier: str, code_challenge: str, method: str) -> bool:
+def verify_pkce(
+    code_verifier: str, code_challenge: str, method: str, *, allow_plain: bool = True
+) -> bool:
     """Verify a PKCE ``code_verifier`` against the stored ``code_challenge``.
 
     Comparison is constant-time. Returns ``False`` for any unknown method,
@@ -72,11 +87,14 @@ def verify_pkce(code_verifier: str, code_challenge: str, method: str) -> bool:
         code_challenge: The challenge that was bound to the authorization
             code at the ``/authorize`` step.
         method: ``"S256"`` or ``"plain"``. Any other value returns ``False``.
+        allow_plain: Whether ``plain`` verification is permitted. Set to
+            ``False`` to enforce an S256-only policy (OAuth 2.1 / RFC 9700);
+            ``plain`` then returns ``False`` like any other rejected method.
     """
     if method == S256:
         digest = hashlib.sha256(code_verifier.encode("utf-8")).digest()
         computed = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
         return secrets.compare_digest(computed.encode("utf-8"), code_challenge.encode("utf-8"))
-    if method == PLAIN:
+    if method == PLAIN and allow_plain:
         return secrets.compare_digest(code_verifier.encode("utf-8"), code_challenge.encode("utf-8"))
     return False
