@@ -66,6 +66,7 @@ class SlidingWindowRateLimiter:
         self.window_seconds = window_seconds
         self._redis = redis
         self._clients: dict[str, list[float]] = defaultdict(list)
+        self._last_sweep = 0.0
 
     def _redis_key(self, client_id: str) -> str:
         return f"{_REDIS_RATELIMIT_PREFIX}{client_id}:{self.window_seconds}"
@@ -163,17 +164,42 @@ class SlidingWindowRateLimiter:
 
     def _is_allowed_memory(self, client_id: str) -> bool:
         now = time.time()
-        self._clients[client_id] = [
-            t for t in self._clients[client_id] if now - t < self.window_seconds
-        ]
-        if len(self._clients[client_id]) >= self.requests_per_window:
+        self._sweep_expired(now)
+        timestamps = [t for t in self._clients[client_id] if now - t < self.window_seconds]
+        if len(timestamps) >= self.requests_per_window:
+            self._clients[client_id] = timestamps
             return False
-        self._clients[client_id].append(now)
+        timestamps.append(now)
+        self._clients[client_id] = timestamps
         return True
 
     def _get_retry_after_memory(self, client_id: str) -> int:
-        if not self._clients[client_id]:
+        # Read without ``defaultdict`` autovivification so an unknown client
+        # does not leave a lingering empty key behind.
+        timestamps = self._clients.get(client_id)
+        if not timestamps:
             return 0
-        oldest_request = min(self._clients[client_id])
+        oldest_request = min(timestamps)
         retry_after = int(self.window_seconds - (time.time() - oldest_request)) + 1
         return max(retry_after, 1)
+
+    def _sweep_expired(self, now: float) -> None:
+        """Drop client keys whose requests have all aged out of the window.
+
+        Without this the in-memory ``_clients`` dict grows unboundedly: a
+        client that stops calling (e.g. a caller rotating source IPs, since the
+        registration handler keys the limiter on client IP) leaves a stale entry
+        that per-request filtering never revisits (CWE-770). The sweep is
+        throttled to at most once per window so it stays O(1) amortised.
+        """
+        if now - self._last_sweep < self.window_seconds:
+            return
+        self._last_sweep = now
+        cutoff = now - self.window_seconds
+        stale = [
+            client_id
+            for client_id, timestamps in self._clients.items()
+            if not timestamps or max(timestamps) < cutoff
+        ]
+        for client_id in stale:
+            del self._clients[client_id]

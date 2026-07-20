@@ -114,6 +114,55 @@ class TestSlidingWindowEviction:
 
 
 # ---------------------------------------------------------------------------
+# Idle-key eviction — in-memory path (unbounded growth guard)
+# ---------------------------------------------------------------------------
+
+
+class TestIdleKeyEviction:
+    async def test_idle_client_key_is_swept(self) -> None:
+        """A client that stops calling is evicted once its window elapses."""
+        limiter = SlidingWindowRateLimiter(requests_per_window=5, window_seconds=10)
+        t0 = 1_000_000.0
+
+        with patch("mcp_authflow.rate_limiting.time") as mock_time:
+            mock_time.time.return_value = t0
+            await limiter.is_allowed("idle")
+            assert "idle" in limiter._clients
+
+            # A later call from a different client, past the idle client's
+            # window, triggers the sweep and drops the stale key.
+            mock_time.time.return_value = t0 + 11.0
+            await limiter.is_allowed("active")
+
+            assert "idle" not in limiter._clients
+            assert "active" in limiter._clients
+
+    async def test_active_client_is_not_swept(self) -> None:
+        """A key with an in-window request survives the sweep."""
+        limiter = SlidingWindowRateLimiter(requests_per_window=5, window_seconds=10)
+        t0 = 1_000_000.0
+
+        with patch("mcp_authflow.rate_limiting.time") as mock_time:
+            mock_time.time.return_value = t0
+            await limiter.is_allowed("a")
+
+            mock_time.time.return_value = t0 + 6.0
+            await limiter.is_allowed("a")  # refresh within window
+
+            mock_time.time.return_value = t0 + 11.0
+            await limiter.is_allowed("b")  # triggers sweep
+
+            assert "a" in limiter._clients  # newest entry (t0+6) still in window
+            assert "b" in limiter._clients
+
+    async def test_get_retry_after_does_not_create_key(self) -> None:
+        """Querying an unknown client must not grow the backing dict."""
+        limiter = SlidingWindowRateLimiter(requests_per_window=5, window_seconds=60)
+        assert await limiter.get_retry_after("never-seen") == 0
+        assert "never-seen" not in limiter._clients
+
+
+# ---------------------------------------------------------------------------
 # get_retry_after — in-memory path
 # ---------------------------------------------------------------------------
 
