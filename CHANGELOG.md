@@ -22,6 +22,15 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Security
 
+- The in-memory sliding-window rate limiter now evicts idle client keys.
+  Previously `SlidingWindowRateLimiter` only filtered expired timestamps on a
+  per-client request, so a caller that stopped calling (or rotated source IPs,
+  since the registration handler keys the limiter on client IP) left stale keys
+  in the backing dict forever, growing it unboundedly (CWE-770). A throttled
+  sweep (at most once per window) drops keys whose requests have all aged out,
+  and `get_retry_after` no longer autovivifies a key for an unknown client. The
+  Redis-backed path already bounds memory via key TTLs and is unchanged.
+  ([#45](https://github.com/brooksmcmillin/mcp-authflow/issues/45))
 - The PKCE helpers gained an opt-in S256-only policy: `verify_pkce` and
   `validate_code_challenge_method` accept `allow_plain=False` to reject the
   `plain` method, which OAuth 2.1 and RFC 9700 deprecate (CWE-757). The new
