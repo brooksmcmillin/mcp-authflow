@@ -20,6 +20,14 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Fixed
 
+- `build_device_authorization_response` now composes the fallback
+  `verification_uri_complete` with `urllib.parse` instead of string
+  concatenation. A configured `verification_uri` that already contains a query
+  string or fragment previously produced a malformed complete-URI (e.g. a
+  second `?`); the `code` parameter is now URL-encoded and merged into any
+  existing query, preserving fragments (CWE-20).
+  ([#46](https://github.com/brooksmcmillin/mcp-authflow/issues/46))
+
 ### Security
 
 - The in-memory sliding-window rate limiter now evicts idle client keys.

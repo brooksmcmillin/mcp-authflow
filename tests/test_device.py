@@ -272,6 +272,30 @@ class TestBuildDeviceAuthorizationResponse:
             "https://auth.example.com/device?code=WDJB-MJHT"
         )
 
+    def test_default_complete_uri_merges_existing_query(self) -> None:
+        resp = build_device_authorization_response(
+            device_code="dev123",
+            user_code="WDJB-MJHT",
+            verification_uri="https://auth.example.com/device?tenant=acme",
+            expires_in=600,
+            interval=5,
+        )
+        assert resp["verification_uri_complete"] == (
+            "https://auth.example.com/device?tenant=acme&code=WDJB-MJHT"
+        )
+
+    def test_default_complete_uri_preserves_fragment(self) -> None:
+        resp = build_device_authorization_response(
+            device_code="dev123",
+            user_code="WDJB-MJHT",
+            verification_uri="https://auth.example.com/device#section",
+            expires_in=600,
+            interval=5,
+        )
+        assert resp["verification_uri_complete"] == (
+            "https://auth.example.com/device?code=WDJB-MJHT#section"
+        )
+
     def test_explicit_complete_uri_is_passed_through(self) -> None:
         resp = build_device_authorization_response(
             device_code="dev123",
