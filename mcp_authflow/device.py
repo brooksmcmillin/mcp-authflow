@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Protocol
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 
@@ -230,6 +231,20 @@ def evaluate_device_poll(
     return DevicePollDecision(kind, record=record)
 
 
+def _append_user_code(verification_uri: str, user_code: str) -> str:
+    """Add ``code=<user_code>`` to ``verification_uri``'s query string.
+
+    Uses :mod:`urllib.parse` so an existing query string or fragment is
+    preserved and the ``code`` value is URL-encoded, rather than naive string
+    concatenation which would produce a malformed URI for a ``verification_uri``
+    that already contains ``?``/``#``/query params.
+    """
+    parts = urlsplit(verification_uri)
+    query = parse_qsl(parts.query, keep_blank_values=True)
+    query.append(("code", user_code))
+    return urlunsplit(parts._replace(query=urlencode(query)))
+
+
 def build_device_authorization_response(
     *,
     device_code: str,
@@ -241,9 +256,9 @@ def build_device_authorization_response(
 ) -> dict[str, str | int]:
     """Assemble an RFC 8628 §3.2 device authorization response.
 
-    If ``verification_uri_complete`` is omitted, it is derived as
-    ``f"{verification_uri}?code={user_code}"`` so the user can scan a QR code
-    on the device and skip typing the ``user_code``.
+    If ``verification_uri_complete`` is omitted, it is derived by merging a
+    URL-encoded ``code=<user_code>`` parameter into ``verification_uri`` so the
+    user can scan a QR code on the device and skip typing the ``user_code``.
     """
     response: dict[str, str | int] = {
         "device_code": device_code,
@@ -252,7 +267,7 @@ def build_device_authorization_response(
         "verification_uri_complete": (
             verification_uri_complete
             if verification_uri_complete is not None
-            else f"{verification_uri}?code={user_code}"
+            else _append_user_code(verification_uri, user_code)
         ),
         "expires_in": expires_in,
         "interval": interval,
