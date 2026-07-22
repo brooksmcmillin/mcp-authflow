@@ -30,6 +30,13 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Security
 
+- Bumped the locked `click` version to `>=8.3.3` (now `8.4.2`) to clear
+  CVE-2026-7246 (PYSEC-2026-2132 / GHSA-47fr-3ffg-hgmw), a command injection in
+  `click.edit()`. Reachability is low: `mcp_authflow` never imports `click` —
+  it enters only transitively via `uvicorn` and `mkdocs` — and this library
+  never calls `click.edit()`. As a library the `uv.lock` pin does not propagate
+  to downstream consumers, who resolve their own `click` version.
+  ([#55](https://github.com/brooksmcmillin/mcp-authflow/issues/55))
 - The in-memory sliding-window rate limiter now evicts idle client keys.
   Previously `SlidingWindowRateLimiter` only filtered expired timestamps on a
   per-client request, so a caller that stopped calling (or rotated source IPs,
