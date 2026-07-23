@@ -12,6 +12,15 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Added
 
+- Documented DDL now creates an index on `expires_at` for both
+  `mcp_access_tokens` and `mcp_refresh_tokens`. Expiry checks on load and the
+  `cleanup_expired_tokens` / `cleanup_expired_refresh_tokens` sweeps
+  (`DELETE ... WHERE expires_at < now()`) previously seq-scanned, degrading and
+  contending with auth traffic on large token tables. The README also shows the
+  `CREATE INDEX CONCURRENTLY` form for adding the index to an existing live
+  table without an `ACCESS EXCLUSIVE` lock.
+  ([#47](https://github.com/brooksmcmillin/mcp-authflow/issues/47))
+
 ### Changed
 
 ### Deprecated
