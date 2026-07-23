@@ -194,6 +194,11 @@ CREATE TABLE IF NOT EXISTS mcp_access_tokens (
     user_id     INTEGER
 );
 
+-- Speeds up expiry checks on load and the `cleanup_expired_tokens` sweep
+-- (`DELETE ... WHERE expires_at < now()`), which would otherwise seq-scan.
+CREATE INDEX IF NOT EXISTS idx_mcp_access_tokens_expires_at
+    ON mcp_access_tokens (expires_at);
+
 -- Only needed if you use the refresh-token methods.
 CREATE TABLE IF NOT EXISTS mcp_refresh_tokens (
     token       TEXT PRIMARY KEY,  -- SHA-256 digest of the refresh token, not the raw value
@@ -204,6 +209,20 @@ CREATE TABLE IF NOT EXISTS mcp_refresh_tokens (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     user_id     INTEGER
 );
+
+CREATE INDEX IF NOT EXISTS idx_mcp_refresh_tokens_expires_at
+    ON mcp_refresh_tokens (expires_at);
+```
+
+On an already-large, live table, build the index with `CREATE INDEX
+CONCURRENTLY` (run outside a transaction) so the migration does not take an
+`ACCESS EXCLUSIVE` lock that blocks concurrent auth traffic:
+
+```sql
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_mcp_access_tokens_expires_at
+    ON mcp_access_tokens (expires_at);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_mcp_refresh_tokens_expires_at
+    ON mcp_refresh_tokens (expires_at);
 ```
 
 Tokens are hashed at rest: the `token` column holds the SHA-256 hex digest of
