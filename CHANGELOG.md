@@ -12,6 +12,16 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Added
 
+- Documented the schema-upgrade path for `PostgresTokenStorage`. The README's
+  new "Schema versioning and upgrades" section explains that
+  `CREATE TABLE IF NOT EXISTS` is a no-op on an existing table (so re-running
+  the DDL after an upgrade never adds new columns), states the current minimum
+  schema, and provides the `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` template
+  future column additions will ship. As a backstop, `initialize()` now runs a
+  lightweight `information_schema` check and raises a clear error naming any
+  required column missing from an existing token table, so schema drift fails
+  fast at startup instead of surfacing as a mid-request `UndefinedColumnError`.
+  ([#48](https://github.com/brooksmcmillin/mcp-authflow/issues/48))
 - Documented DDL now creates an index on `expires_at` for both
   `mcp_access_tokens` and `mcp_refresh_tokens`. Expiry checks on load and the
   `cleanup_expired_tokens` / `cleanup_expired_refresh_tokens` sweeps

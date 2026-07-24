@@ -19,6 +19,20 @@ from mcp_authflow.storage.base import TokenStorage, hash_token, token_fingerprin
 
 logger = logging.getLogger(__name__)
 
+# Columns every token table must have, matching the documented DDL. ``CREATE
+# TABLE IF NOT EXISTS`` is a no-op on a table created under an older schema, so
+# re-running the DDL after a library upgrade never adds new columns. initialize()
+# checks these against ``information_schema`` and fails fast with a clear message
+# instead of letting the drift surface later as a mid-request UndefinedColumnError.
+_REQUIRED_COLUMNS: dict[str, frozenset[str]] = {
+    "mcp_access_tokens": frozenset(
+        {"token", "client_id", "scopes", "resource", "expires_at", "created_at", "user_id"}
+    ),
+    "mcp_refresh_tokens": frozenset(
+        {"token", "client_id", "scopes", "resource", "expires_at", "created_at", "user_id"}
+    ),
+}
+
 
 class PostgresTokenStorage(TokenStorage):
     """Database-backed storage for MCP access tokens using PostgreSQL."""
@@ -46,6 +60,57 @@ class PostgresTokenStorage(TokenStorage):
             command_timeout=30,
         )
         logger.info("Database connection pool initialized")
+        await self._verify_schema()
+
+    async def _verify_schema(self) -> None:
+        """Fail fast when an existing token table is missing a required column.
+
+        Guards against schema drift: a table created under an older schema is
+        left untouched by ``CREATE TABLE IF NOT EXISTS``, so an upgraded library
+        can end up referencing a column the table never gained. This inspects
+        the token tables that already exist and raises with the offending
+        table/column names, pointing at the README upgrade recipe. Tables that
+        do not exist are skipped -- ``mcp_refresh_tokens`` is only needed if the
+        refresh-token methods are used, and a missing access-token table surfaces
+        clearly on first use.
+        """
+        pool = self._require_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT table_name, column_name
+                FROM information_schema.columns
+                WHERE table_schema = ANY(current_schemas(false))
+                  AND table_name = ANY($1::text[])
+                """,
+                list(_REQUIRED_COLUMNS),
+            )
+
+        present: dict[str, set[str]] = {}
+        for row in rows:
+            present.setdefault(row["table_name"], set()).add(row["column_name"])
+
+        missing: dict[str, list[str]] = {}
+        for table, required in _REQUIRED_COLUMNS.items():
+            columns = present.get(table)
+            if columns is None:
+                # Table does not exist yet; nothing to validate.
+                continue
+            absent = sorted(required - columns)
+            if absent:
+                missing[table] = absent
+
+        if missing:
+            detail = "; ".join(
+                f"{table} is missing column(s): {', '.join(cols)}"
+                for table, cols in sorted(missing.items())
+            )
+            raise RuntimeError(
+                f"Token storage schema is out of date: {detail}. "
+                "CREATE TABLE IF NOT EXISTS does not add columns to an existing "
+                "table -- apply the ALTER TABLE upgrade DDL from the README "
+                "'Schema versioning and upgrades' section before starting."
+            )
 
     async def close(self) -> None:
         """Close the database connection pool."""
