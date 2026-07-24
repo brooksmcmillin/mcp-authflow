@@ -37,12 +37,34 @@ def _mock_conn(fetchrow_return: dict | None = None, execute_return: str = "DELET
     return conn
 
 
-def _patch_pool(storage: PostgresTokenStorage, conn: MagicMock) -> None:
-    """Patch storage._pool.acquire() to yield the mock connection."""
+def _patch_pool_on(pool: MagicMock, conn: MagicMock) -> None:
+    """Patch a mock pool's acquire() to yield the mock connection."""
     ctx = AsyncMock()
     ctx.__aenter__ = AsyncMock(return_value=conn)
     ctx.__aexit__ = AsyncMock(return_value=False)
-    storage._pool.acquire = MagicMock(return_value=ctx)  # type: ignore[union-attr]
+    pool.acquire = MagicMock(return_value=ctx)
+
+
+def _patch_pool(storage: PostgresTokenStorage, conn: MagicMock) -> None:
+    """Patch storage._pool.acquire() to yield the mock connection."""
+    _patch_pool_on(storage._pool, conn)  # type: ignore[arg-type]
+
+
+# The columns the documented DDL defines for each token table.
+_ALL_COLUMNS = ("token", "client_id", "scopes", "resource", "expires_at", "created_at", "user_id")
+
+
+def _schema_rows(
+    access_columns: tuple[str, ...] = _ALL_COLUMNS,
+    refresh_columns: tuple[str, ...] = _ALL_COLUMNS,
+) -> list[dict[str, str]]:
+    """Build information_schema.columns rows for the token tables."""
+    rows: list[dict[str, str]] = []
+    for column in access_columns:
+        rows.append({"table_name": "mcp_access_tokens", "column_name": column})
+    for column in refresh_columns:
+        rows.append({"table_name": "mcp_refresh_tokens", "column_name": column})
+    return rows
 
 
 class TestStoreTokenTimezone:
@@ -451,6 +473,11 @@ class TestInitialize:
         """initialize() calls asyncpg.create_pool with correct parameters."""
         storage = PostgresTokenStorage(database_url="postgresql://test:test@localhost/test")
         mock_pool = MagicMock()
+        # initialize() runs a schema check after creating the pool; return a
+        # fully-populated schema so it passes.
+        conn = _mock_conn()
+        conn.fetch = AsyncMock(return_value=_schema_rows())
+        _patch_pool_on(mock_pool, conn)
 
         with patch("asyncpg.create_pool", new=AsyncMock(return_value=mock_pool)) as mock_create:
             await storage.initialize()
@@ -462,6 +489,69 @@ class TestInitialize:
             command_timeout=30,
         )
         assert storage._pool is mock_pool
+
+
+class TestVerifySchema:
+    """Tests for the information_schema drift check run during initialize()."""
+
+    @pytest.mark.asyncio
+    async def test_passes_when_all_columns_present(self) -> None:
+        """A fully-populated schema does not raise."""
+        storage = _make_storage()
+        conn = _mock_conn()
+        conn.fetch = AsyncMock(return_value=_schema_rows())
+        _patch_pool(storage, conn)
+
+        await storage._verify_schema()  # should not raise
+
+    @pytest.mark.asyncio
+    async def test_raises_when_column_missing(self) -> None:
+        """A table missing a required column fails fast, naming table and column."""
+        storage = _make_storage()
+        conn = _mock_conn()
+        drifted = tuple(c for c in _ALL_COLUMNS if c != "user_id")
+        conn.fetch = AsyncMock(return_value=_schema_rows(access_columns=drifted))
+        _patch_pool(storage, conn)
+
+        with pytest.raises(RuntimeError, match="schema is out of date") as exc_info:
+            await storage._verify_schema()
+
+        message = str(exc_info.value)
+        assert "mcp_access_tokens" in message
+        assert "user_id" in message
+        assert "ALTER TABLE" in message
+
+    @pytest.mark.asyncio
+    async def test_skips_tables_that_do_not_exist(self) -> None:
+        """A table with no rows in information_schema is treated as not-yet-created."""
+        storage = _make_storage()
+        conn = _mock_conn()
+        # Only the access-token table exists; the refresh table is optional.
+        conn.fetch = AsyncMock(return_value=_schema_rows(refresh_columns=()))
+        _patch_pool(storage, conn)
+
+        await storage._verify_schema()  # should not raise
+
+    @pytest.mark.asyncio
+    async def test_reports_multiple_missing_columns(self) -> None:
+        """All missing columns across both tables are reported together."""
+        storage = _make_storage()
+        conn = _mock_conn()
+        conn.fetch = AsyncMock(
+            return_value=_schema_rows(
+                access_columns=("token", "client_id", "scopes", "expires_at", "created_at"),
+                refresh_columns=("token", "client_id", "scopes", "resource", "created_at"),
+            )
+        )
+        _patch_pool(storage, conn)
+
+        with pytest.raises(RuntimeError) as exc_info:
+            await storage._verify_schema()
+
+        message = str(exc_info.value)
+        assert "resource" in message
+        assert "user_id" in message
+        assert "expires_at" in message
 
 
 class TestClose:

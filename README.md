@@ -225,6 +225,43 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_mcp_refresh_tokens_expires_at
     ON mcp_refresh_tokens (expires_at);
 ```
 
+#### Schema versioning and upgrades
+
+The DDL above uses `CREATE TABLE IF NOT EXISTS`, which is a no-op when the table
+already exists. That is the right behaviour for a fresh install, but it means
+re-running the DDL after upgrading the library **does not** add any columns a
+newer release introduced — Postgres silently keeps your existing table as-is,
+and no error is raised. If a later version then references a column your table
+is missing, backend queries fail at runtime with `UndefinedColumnError`.
+
+To stay ahead of this:
+
+- **Every release documents the schema it expects.** All columns shown above
+  have shipped since the DDL was first published, so the current minimum schema
+  is simply the base tables above. When a future release adds, drops, or
+  changes a column, this README and the [CHANGELOG](CHANGELOG.md) will call it
+  out and ship a copy-paste `ALTER TABLE` recipe next to the base `CREATE`.
+- **Apply the upgrade DDL, don't just re-run `CREATE`.** Upgrade blocks use
+  `ADD COLUMN IF NOT EXISTS` so they are safe to run more than once and safe on
+  a table that predates or already has the column. The template for such a
+  block looks like:
+
+  ```sql
+  -- Upgrade to <version>: adds <column> to the token tables.
+  ALTER TABLE mcp_access_tokens  ADD COLUMN IF NOT EXISTS <column> <type>;
+  ALTER TABLE mcp_refresh_tokens ADD COLUMN IF NOT EXISTS <column> <type>;
+  ```
+
+  There are no such blocks yet — the schema has not changed since it was first
+  published. This section is where they will appear when it does.
+
+As a backstop, `initialize()` performs a lightweight `information_schema` check
+on the token tables that already exist and raises a clear error naming any
+required column that is missing, so schema drift fails fast at startup instead
+of surfacing as a mid-request `UndefinedColumnError`. Tables you have not
+created are left alone (the `mcp_refresh_tokens` table is only needed if you use
+the refresh-token methods).
+
 Tokens are hashed at rest: the `token` column holds the SHA-256 hex digest of
 the token, never the raw secret, so a database compromise does not leak
 replayable credentials. Hashing is internal — the `store_token` / `load_token`
