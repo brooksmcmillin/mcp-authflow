@@ -2,7 +2,18 @@
 
 import hashlib
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, TypeAlias
+
+UserId: TypeAlias = int | str
+"""Identifier of the user who authorized a token.
+
+Deliberately not narrowed to ``int``: consuming applications key users on
+anything from a ``SERIAL``/``BIGINT`` counter to a ``UUID`` or an external
+subject string. Storage backends pass the value straight through, so the type
+you hand in has to match the ``user_id`` column type in your DDL (see the README
+"Choosing a ``user_id`` column type" section for the ``BIGINT``/``UUID``/``TEXT``
+variants). Pass UUIDs in their string form.
+"""
 
 
 def token_fingerprint(token: str) -> str:
@@ -61,7 +72,7 @@ class TokenStorage(ABC):
         scopes: list[str],
         expires_at: int,
         resource: str | None = None,
-        user_id: int | None = None,
+        user_id: UserId | None = None,
     ) -> None:
         """Store an access token.
 
@@ -71,7 +82,9 @@ class TokenStorage(ABC):
             scopes: List of granted scopes
             expires_at: Unix timestamp when token expires
             resource: Optional RFC 8707 resource binding
-            user_id: Optional ID of the user who authorized the token
+            user_id: Optional ID of the user who authorized the token. May be an
+                int or a str so it can match the consumer's user primary key
+                (see :data:`~mcp_authflow.storage.base.UserId`)
         """
         ...
 
@@ -104,7 +117,7 @@ class TokenStorage(ABC):
         scopes: list[str],
         expires_at: int,
         resource: str | None = None,
-        user_id: int | None = None,
+        user_id: UserId | None = None,
     ) -> None:
         """Store a refresh token.
 
@@ -114,7 +127,9 @@ class TokenStorage(ABC):
             scopes: List of granted scopes
             expires_at: Unix timestamp when token expires
             resource: Optional RFC 8707 resource binding
-            user_id: Optional ID of the user who authorized the token
+            user_id: Optional ID of the user who authorized the token. May be an
+                int or a str so it can match the consumer's user primary key
+                (see :data:`~mcp_authflow.storage.base.UserId`)
         """
         ...
 

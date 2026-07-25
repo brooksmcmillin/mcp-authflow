@@ -191,7 +191,7 @@ CREATE TABLE IF NOT EXISTS mcp_access_tokens (
     resource    TEXT,
     expires_at  TIMESTAMPTZ NOT NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    user_id     INTEGER
+    user_id     INTEGER            -- match your own user PK type; see below
 );
 
 -- Speeds up expiry checks on load and the `cleanup_expired_tokens` sweep
@@ -207,7 +207,7 @@ CREATE TABLE IF NOT EXISTS mcp_refresh_tokens (
     resource    TEXT,
     expires_at  TIMESTAMPTZ NOT NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    user_id     INTEGER
+    user_id     INTEGER            -- match your own user PK type; see below
 );
 
 CREATE INDEX IF NOT EXISTS idx_mcp_refresh_tokens_expires_at
@@ -223,6 +223,37 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_mcp_access_tokens_expires_at
     ON mcp_access_tokens (expires_at);
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_mcp_refresh_tokens_expires_at
     ON mcp_refresh_tokens (expires_at);
+```
+
+#### Choosing a `user_id` column type
+
+`INTEGER` above is only a default that suits a `SERIAL` user table. The library
+never compares, casts, or joins on `user_id` — it stores whatever you pass and
+returns it unchanged — so pick the type that matches your own user primary key
+and use it in both token tables:
+
+| Your user PK | `user_id` column | Value to pass |
+|--------------|------------------|---------------|
+| `SERIAL` / `INTEGER` | `INTEGER` | `int` |
+| `BIGSERIAL` / `BIGINT` | `BIGINT` | `int` |
+| `UUID` | `UUID` | `str` (canonical hex form) |
+| External subject / any string | `TEXT` | `str` |
+
+`TEXT` is the type-agnostic choice if you want the schema to outlive a change of
+user-ID scheme. Accordingly, `store_token()` / `store_refresh_token()` accept
+`user_id: int | str | None` (exported as `mcp_authflow.UserId`), and
+`load_token()` returns it as stored. Passing a value whose type does not match
+the column is a plain Postgres type error, so keep the two in sync.
+
+`user_id` is deliberately **not** indexed: nothing in the library looks tokens up
+by user. If your application adds such a lookup (for example "revoke all tokens
+for this user"), add the index yourself so it does not seq-scan:
+
+```sql
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_mcp_access_tokens_user_id
+    ON mcp_access_tokens (user_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_mcp_refresh_tokens_user_id
+    ON mcp_refresh_tokens (user_id);
 ```
 
 #### Schema versioning and upgrades
@@ -295,7 +326,7 @@ Token data returned by `load_token()`:
     "resource": str | None,       # RFC 8707 resource binding
     "expires_at": int,            # Unix timestamp
     "created_at": int,            # Unix timestamp
-    "user_id": int | None,
+    "user_id": int | str | None,  # exactly what was passed to store_token()
 }
 ```
 

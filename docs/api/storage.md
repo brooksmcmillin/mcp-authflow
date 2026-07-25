@@ -17,3 +17,7 @@
 ## PostgresTokenStorage
 
 ::: mcp_authflow.storage.postgres.PostgresTokenStorage
+
+## UserId
+
+::: mcp_authflow.storage.base.UserId

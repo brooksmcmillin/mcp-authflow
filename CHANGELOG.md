@@ -30,8 +30,23 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
   `CREATE INDEX CONCURRENTLY` form for adding the index to an existing live
   table without an `ACCESS EXCLUSIVE` lock.
   ([#47](https://github.com/brooksmcmillin/mcp-authflow/issues/47))
+- New README section "Choosing a `user_id` column type" documents that the
+  documented `user_id INTEGER` is only a default for a `SERIAL` user table, and
+  gives the `BIGINT` / `UUID` / `TEXT` variants for consumers whose user primary
+  key is not a 32-bit integer. It also notes that `user_id` is intentionally
+  unindexed (nothing in the library looks tokens up by user) and provides the
+  `CREATE INDEX CONCURRENTLY` statements to add if an application introduces a
+  per-user lookup.
+  ([#49](https://github.com/brooksmcmillin/mcp-authflow/issues/49))
 
 ### Changed
+
+- `store_token()` and `store_refresh_token()` now accept `user_id: int | str |
+  None` instead of `int | None`, exported as the `mcp_authflow.UserId` alias.
+  The value is stored and returned verbatim, so a UUID or opaque-subject user
+  key no longer needs a cast or a type-ignore at the call site. Existing
+  integer callers are unaffected.
+  ([#49](https://github.com/brooksmcmillin/mcp-authflow/issues/49))
 
 ### Deprecated
 

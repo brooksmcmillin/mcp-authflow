@@ -89,6 +89,20 @@ class TestStoreAndLoadToken:
         assert data["resource"] == "https://api.example.com"
         assert data["user_id"] == 42
 
+    async def test_string_user_id_round_trips(self, storage: MemoryTokenStorage) -> None:
+        """user_id is stored verbatim so UUID/TEXT user keys work, not just INTEGER ones."""
+        expires_at = int(time.time()) + 3600
+        user_id = "5f7c9d3e-1b2a-4c6d-8e9f-0a1b2c3d4e5f"
+        await storage.store_token("tok-uuid", "c", ["read"], expires_at, user_id=user_id)
+        await storage.store_refresh_token("rt-uuid", "c", ["read"], expires_at, user_id=user_id)
+
+        access = await storage.load_token("tok-uuid")
+        refresh = await storage.load_refresh_token("rt-uuid")
+        assert access is not None
+        assert refresh is not None
+        assert access["user_id"] == user_id
+        assert refresh["user_id"] == user_id
+
     async def test_load_returns_copy(self, storage: MemoryTokenStorage) -> None:
         """Returned dict is a shallow copy — replacing a top-level key does not affect storage."""
         expires_at = int(time.time()) + 3600
