@@ -15,7 +15,7 @@ except ImportError as _exc:
         "PostgresTokenStorage requires asyncpg. Install it with: pip install mcp-authflow[postgres]"
     ) from _exc
 
-from mcp_authflow.storage.base import TokenStorage, hash_token, token_fingerprint
+from mcp_authflow.storage.base import TokenStorage, UserId, hash_token, token_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +133,7 @@ class PostgresTokenStorage(TokenStorage):
         scopes: list[str],
         expires_at: int,
         resource: str | None,
-        user_id: int | None,
+        user_id: UserId | None,
         label: str,
     ) -> None:
         """Insert or update a token record in the given table."""
@@ -239,7 +239,7 @@ class PostgresTokenStorage(TokenStorage):
         scopes: list[str],
         expires_at: int,
         resource: str | None = None,
-        user_id: int | None = None,
+        user_id: UserId | None = None,
     ) -> None:
         """Store an access token in the database.
 
@@ -249,7 +249,9 @@ class PostgresTokenStorage(TokenStorage):
             scopes: List of granted scopes
             expires_at: Unix timestamp when token expires
             resource: Optional RFC 8707 resource binding
-            user_id: Optional ID of the user who authorized the token
+            user_id: Optional ID of the user who authorized the token. May be an
+                int or a str so it can match the consumer's user primary key
+                (see :data:`~mcp_authflow.storage.base.UserId`)
         """
         await self._store_to(
             "mcp_access_tokens",
@@ -308,7 +310,7 @@ class PostgresTokenStorage(TokenStorage):
         scopes: list[str],
         expires_at: int,
         resource: str | None = None,
-        user_id: int | None = None,
+        user_id: UserId | None = None,
     ) -> None:
         """Store a refresh token in the database.
 
@@ -318,7 +320,9 @@ class PostgresTokenStorage(TokenStorage):
             scopes: List of granted scopes
             expires_at: Unix timestamp when token expires
             resource: Optional RFC 8707 resource binding
-            user_id: Optional ID of the user who authorized the token
+            user_id: Optional ID of the user who authorized the token. May be an
+                int or a str so it can match the consumer's user primary key
+                (see :data:`~mcp_authflow.storage.base.UserId`)
         """
         await self._store_to(
             "mcp_refresh_tokens",

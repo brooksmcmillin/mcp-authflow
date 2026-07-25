@@ -204,6 +204,64 @@ class TestLoadTokenTimezone:
         assert result is not None
 
 
+class TestUserIdPassThrough:
+    """user_id is stored and returned verbatim, so UUID/TEXT columns work too."""
+
+    _UUID = "5f7c9d3e-1b2a-4c6d-8e9f-0a1b2c3d4e5f"
+
+    @pytest.mark.asyncio
+    async def test_store_token_passes_string_user_id_unchanged(self) -> None:
+        storage = _make_storage()
+        conn = _mock_conn()
+        _patch_pool(storage, conn)
+
+        await storage.store_token(
+            token="test_token",  # noqa: S106
+            client_id="client1",
+            scopes=["read"],
+            expires_at=int(datetime.now(UTC).timestamp()) + 3600,
+            user_id=self._UUID,
+        )
+
+        assert self._UUID in conn.execute.call_args[0]
+
+    @pytest.mark.asyncio
+    async def test_store_refresh_token_passes_string_user_id_unchanged(self) -> None:
+        storage = _make_storage()
+        conn = _mock_conn()
+        _patch_pool(storage, conn)
+
+        await storage.store_refresh_token(
+            refresh_token="test_refresh",  # noqa: S106
+            client_id="client1",
+            scopes=["read"],
+            expires_at=int(datetime.now(UTC).timestamp()) + 86400,
+            user_id=self._UUID,
+        )
+
+        assert self._UUID in conn.execute.call_args[0]
+
+    @pytest.mark.asyncio
+    async def test_load_token_returns_string_user_id(self) -> None:
+        storage = _make_storage()
+        row = {
+            "token": "test_token",
+            "client_id": "client1",
+            "scopes": "read",
+            "resource": None,
+            "expires_at": datetime.now(UTC) + timedelta(hours=1),
+            "created_at": datetime.now(UTC),
+            "user_id": self._UUID,
+        }
+        conn = _mock_conn(fetchrow_return=row)
+        _patch_pool(storage, conn)
+
+        result = await storage.load_token("test_token")
+
+        assert result is not None
+        assert result["user_id"] == self._UUID
+
+
 class TestLoadRefreshTokenTimezone:
     """Same timezone tests for refresh tokens."""
 
