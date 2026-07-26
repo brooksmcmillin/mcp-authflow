@@ -196,7 +196,23 @@ class JWTClientAuthenticator:
         """Authenticate a client using private_key_jwt.
 
         Returns ``True`` on success and raises :class:`JWTAuthError` otherwise.
+        Rejections are logged at WARNING before the error propagates, so an
+        operator watching this logger sees failed attempts (replay detection,
+        blocked algorithms, ...) and not just successes.
         """
+        try:
+            return await self._authenticate(client_id, client_assertion, client_assertion_type)
+        except JWTAuthError as e:
+            # Only the error message is logged — never the assertion itself.
+            logger.warning("private_key_jwt authentication failed for client %s: %s", client_id, e)
+            raise
+
+    async def _authenticate(
+        self,
+        client_id: str,
+        client_assertion: str,
+        client_assertion_type: str,
+    ) -> bool:
         if client_assertion_type != JWT_CLIENT_ASSERTION_TYPE:
             raise JWTAuthError(
                 f"Invalid client_assertion_type: {client_assertion_type}. "

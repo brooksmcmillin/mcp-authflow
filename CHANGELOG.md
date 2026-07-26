@@ -41,6 +41,14 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Changed
 
+- `JWTClientAuthenticator.authenticate()` now logs a WARNING when
+  `private_key_jwt` authentication is rejected, instead of only logging
+  successes at INFO. Every failure path — replay detection, blocked or
+  disallowed algorithm, subject mismatch, expired or too-old assertion, invalid
+  audience/issuer, unresolvable JWKS — is covered, matching the WARNING-on-
+  rejection behaviour the registration handler already had. Only the
+  `client_id` and the error message are logged; the assertion itself never is.
+  ([#53](https://github.com/brooksmcmillin/mcp-authflow/issues/53))
 - `store_token()` and `store_refresh_token()` now accept `user_id: int | str |
   None` instead of `int | None`, exported as the `mcp_authflow.UserId` alias.
   The value is stored and returned verbatim, so a UUID or opaque-subject user
