@@ -1,5 +1,6 @@
 """Tests for private_key_jwt client authentication (RFC 7523)."""
 
+import logging
 import time
 from typing import Any, cast
 
@@ -306,6 +307,79 @@ class TestAuthenticate:
             )
             is True
         )
+
+    @pytest.mark.asyncio
+    async def test_failure_is_logged_at_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        private_key, public_key = _generate_rsa_keypair()
+        jwks = _make_jwks_from_public_key(public_key)
+        auth, _ = _create_authenticator(jwks=jwks)
+
+        client_id = "https://client.example.com"
+        assertion = _sign_jwt(private_key, client_id=client_id)
+        await auth.authenticate(
+            client_id=client_id,
+            client_assertion=assertion,
+            client_assertion_type=JWT_CLIENT_ASSERTION_TYPE,
+        )
+
+        with (
+            caplog.at_level(logging.WARNING, logger="mcp_authflow.client_auth.jwt"),
+            pytest.raises(JWTAuthError, match="replay detected"),
+        ):
+            await auth.authenticate(
+                client_id=client_id,
+                client_assertion=assertion,
+                client_assertion_type=JWT_CLIENT_ASSERTION_TYPE,
+            )
+
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        message = warnings[0].getMessage()
+        assert "private_key_jwt authentication failed" in message
+        assert client_id in message
+        assert "replay detected" in message
+        # The assertion itself must never be logged.
+        assert assertion not in message
+
+    @pytest.mark.asyncio
+    async def test_early_rejection_is_logged_at_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        auth, _ = _create_authenticator(jwks=None)
+
+        with (
+            caplog.at_level(logging.WARNING, logger="mcp_authflow.client_auth.jwt"),
+            pytest.raises(JWTAuthError, match="Could not retrieve JWKS"),
+        ):
+            await auth.authenticate(
+                client_id="https://client.example.com",
+                client_assertion="some.jwt.here",
+                client_assertion_type=JWT_CLIENT_ASSERTION_TYPE,
+            )
+
+        assert any(
+            "private_key_jwt authentication failed" in r.getMessage()
+            for r in caplog.records
+            if r.levelno == logging.WARNING
+        )
+
+    @pytest.mark.asyncio
+    async def test_success_logs_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        private_key, public_key = _generate_rsa_keypair()
+        jwks = _make_jwks_from_public_key(public_key)
+        auth, _ = _create_authenticator(jwks=jwks)
+
+        client_id = "https://client.example.com"
+        assertion = _sign_jwt(private_key, client_id=client_id)
+
+        with caplog.at_level(logging.WARNING, logger="mcp_authflow.client_auth.jwt"):
+            await auth.authenticate(
+                client_id=client_id,
+                client_assertion=assertion,
+                client_assertion_type=JWT_CLIENT_ASSERTION_TYPE,
+            )
+
+        assert [r for r in caplog.records if r.levelno == logging.WARNING] == []
 
 
 class TestVerifyJWT:
