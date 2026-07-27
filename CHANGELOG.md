@@ -60,6 +60,15 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Removed
 
+- Dropped `aiohttp`, `mcp`, `pydantic`, and `pydantic-settings` from
+  `[project.dependencies]`. None of them were imported anywhere in the package,
+  and they pulled a sizeable transitive tree (`click`, `httpx`, `uvicorn`,
+  `yarl`, ...) into every install. The matching `DEP002` deptry ignore is gone
+  too, so the check now runs unsuppressed. Installs are unaffected unless a
+  consumer was relying on this package to pull those in transitively, in which
+  case declare them directly.
+  ([#54](https://github.com/brooksmcmillin/mcp-authflow/issues/54))
+
 ### Fixed
 
 - `build_device_authorization_response` now composes the fallback

@@ -22,10 +22,6 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "aiohttp>=3.13.0",
-    "mcp>=1.24.0",
-    "pydantic>=2.0.0",
-    "pydantic-settings>=2.0.0",
     "pyjwt[crypto]>=2.8.0",
     "starlette>=1.0.1",
 ]
@@ -44,6 +40,8 @@ dev = [
     "asyncpg>=0.31.0",
     "cryptography>=42.0.0",
     "fakeredis>=2.20.0",
+    # Required by starlette.testclient, which the test suite uses.
+    "httpx2>=2.9.0",
     "pytest>=9.0.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
@@ -90,7 +88,3 @@ extend_exclude = ["site", "docs"]
 
 [tool.deptry.package_module_name_map]
 pyjwt = "jwt"
-
-[tool.deptry.per_rule_ignores]
-# TODO: audit whether these declared deps are still needed.
-DEP002 = ["aiohttp", "mcp", "pydantic", "pydantic-settings"]
