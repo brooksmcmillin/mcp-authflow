@@ -12,6 +12,20 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## 0.8.0
+
+### Added
+
 - Documented the schema-upgrade path for `PostgresTokenStorage`. The README's
   new "Schema versioning and upgrades" section explains that
   `CREATE TABLE IF NOT EXISTS` is a no-op on an existing table (so re-running
@@ -56,8 +70,6 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
   integer callers are unaffected.
   ([#49](https://github.com/brooksmcmillin/mcp-authflow/issues/49))
 
-### Deprecated
-
 ### Removed
 
 - Dropped `aiohttp`, `mcp`, `pydantic`, and `pydantic-settings` from
@@ -88,6 +100,15 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
   never calls `click.edit()`. As a library the `uv.lock` pin does not propagate
   to downstream consumers, who resolve their own `click` version.
   ([#55](https://github.com/brooksmcmillin/mcp-authflow/issues/55))
+- The `private_key_jwt` replay cache now caps entry lifetime instead of
+  trusting the client assertion's `exp`. A validly-signed client could set `exp`
+  far in the future and stream unique-`jti` assertions, growing the replay cache
+  (Redis TTL or in-memory dict) without bound (CWE-770). Both
+  `_check_and_record_jti_redis` and the in-memory path now clamp the TTL to the
+  new `JWT_REPLAY_CACHE_MAX_TTL_SECONDS` ceiling
+  (`JWT_MAX_LIFETIME_SECONDS + JWT_MAX_CLOCK_SKEW_SECONDS`), beyond which the
+  independent `iat`-age check already rejects a re-presented assertion.
+  ([#43](https://github.com/brooksmcmillin/mcp-authflow/issues/43))
 - The in-memory sliding-window rate limiter now evicts idle client keys.
   Previously `SlidingWindowRateLimiter` only filtered expired timestamps on a
   per-client request, so a caller that stopped calling (or rotated source IPs,
