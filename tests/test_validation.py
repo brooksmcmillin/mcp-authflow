@@ -1,5 +1,7 @@
 """Tests for OAuth input validation utilities."""
 
+from typing import Any
+
 import pytest
 
 from mcp_authflow.validation import parse_json_field, parse_scope_field, validate_client_id
@@ -79,6 +81,19 @@ class TestParseJsonField:
         value = ["already", "a", "list"]
         result = parse_json_field(value, [])
         assert result is value
+
+    @pytest.mark.parametrize(
+        "value, default",
+        [
+            (123, []),
+            ({"key": "val"}, ["fallback"]),
+            (1.5, ["fallback"]),
+            (True, []),
+        ],
+    )
+    def test_off_type_value_returns_default(self, value: Any, default: list[str]) -> None:
+        """Truthy values that are neither str nor list hit the defensive guard."""
+        assert parse_json_field(value, default) == default
 
 
 # ---------------------------------------------------------------------------
