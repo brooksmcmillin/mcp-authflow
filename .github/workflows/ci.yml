@@ -47,7 +47,13 @@ jobs:
           enable-cache: true
       - run: uv python install ${{ matrix.python-version }}
       - run: uv sync --frozen --python ${{ matrix.python-version }}
-      - run: uv run pytest --tb=short
+      - run: uv run pytest --tb=short --cov --cov-report=term-missing --cov-report=json
+      - name: Upload coverage report
+        if: matrix.python-version == '3.13'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-json
+          path: coverage.json
 
   deptry:
     name: Lint | Dependency Hygiene
