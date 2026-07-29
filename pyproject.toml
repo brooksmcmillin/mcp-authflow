@@ -73,6 +73,12 @@ ignore = []
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
+[tool.coverage.run]
+source = ["mcp_authflow"]
+
+[tool.coverage.report]
+show_missing = true
+
 [tool.pyright]
 pythonVersion = "3.11"
 typeCheckingMode = "standard"

@@ -11,8 +11,12 @@ venv/
 .ruff_cache/
 .pyright/
 .pytest_cache/
-.coverage
-htmlcov/
 site/
 .cache/
+
+# Coverage artifacts are build outputs — CI regenerates them on every run.
+.coverage
+.coverage.*
 coverage.json
+coverage.xml
+htmlcov/
