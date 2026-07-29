@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from mcp_authflow.storage.base import TokenStorage, UserId, hash_token, token_fingerprint
+from mcp_authflow.storage.exceptions import StorageNotInitializedError
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,9 @@ class MemoryTokenStorage(TokenStorage):
     def _require_initialized(self) -> None:
         """Raise if the storage has not been initialized yet."""
         if not self._initialized:
-            raise RuntimeError("Token storage not initialized. Call initialize() first.")
+            raise StorageNotInitializedError(
+                "Token storage not initialized. Call initialize() first."
+            )
 
     def _store_to(
         self,

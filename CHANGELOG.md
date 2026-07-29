@@ -12,6 +12,20 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Added
 
+- Token storage now reports misconfiguration through a dedicated exception
+  hierarchy rooted at `StorageError`: `StorageConfigError` (no database URL),
+  `SchemaDriftError` (an existing token table is missing a required column), and
+  `StorageNotInitializedError` (a storage method called before `initialize()`).
+  Previously every one of these arrived as a bare `RuntimeError` or
+  `ValueError` — indistinguishable from each other and, more importantly,
+  awkward to separate from the `asyncpg`/`OSError` failures a transient database
+  problem raises. A server that wants to retry or degrade on a database blip but
+  refuse to start on a misconfiguration had to match on the message text to tell
+  the two apart; it can now branch on the type. Each class also subclasses the
+  builtin its condition raised before, so existing `except RuntimeError` /
+  `except ValueError` handlers are unaffected. The README's new "Storage errors"
+  section documents the hierarchy and shows the recommended startup pattern.
+
 ### Changed
 
 ### Deprecated
@@ -19,6 +33,15 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 ### Removed
 
 ### Fixed
+
+- The README's "Schema versioning and upgrades" section claimed "the schema has
+  not changed since it was first published" a few paragraphs above the note that
+  0.8.0's at-rest token hashing is a breaking schema change. Someone upgrading
+  who stopped at the first claim would conclude there was nothing to do. The
+  section now separates a column's *shape* from its *contents* and carries an
+  "Upgrading to 0.8.0" block stating that no `ALTER TABLE` is needed, that every
+  pre-0.8.0 row is unreadable, and how to clear the dead rows immediately rather
+  than waiting out their TTL.
 
 ### Security
 

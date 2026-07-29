@@ -85,7 +85,15 @@ from mcp_authflow.responses import (
     slow_down,
     unsupported_grant_type,
 )
-from mcp_authflow.storage import MemoryTokenStorage, TokenStorage, UserId
+from mcp_authflow.storage import (
+    MemoryTokenStorage,
+    SchemaDriftError,
+    StorageConfigError,
+    StorageError,
+    StorageNotInitializedError,
+    TokenStorage,
+    UserId,
+)
 from mcp_authflow.validation import (
     VALID_ID_PATTERN,
     parse_json_field,
@@ -139,6 +147,10 @@ __all__ = [
     # Storage
     "MemoryTokenStorage",
     "PostgresTokenStorage",
+    "SchemaDriftError",
+    "StorageConfigError",
+    "StorageError",
+    "StorageNotInitializedError",
     "TokenStorage",
     "UserId",
     # Validation
