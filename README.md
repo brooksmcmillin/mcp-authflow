@@ -267,11 +267,16 @@ is missing, backend queries fail at runtime with `UndefinedColumnError`.
 
 To stay ahead of this:
 
-- **Every release documents the schema it expects.** All columns shown above
-  have shipped since the DDL was first published, so the current minimum schema
-  is simply the base tables above. When a future release adds, drops, or
-  changes a column, this README and the [CHANGELOG](CHANGELOG.md) will call it
-  out and ship a copy-paste `ALTER TABLE` recipe next to the base `CREATE`.
+- **Every release documents the schema it expects.** No release has yet added,
+  dropped, or renamed a column: every column shown above has been in the DDL
+  since it was first published, so the current minimum *shape* is simply the
+  base tables above. When a future release does change a column, this README
+  and the [CHANGELOG](CHANGELOG.md) will call it out and ship a copy-paste
+  `ALTER TABLE` recipe next to the base `CREATE`.
+- **A column's shape and its contents are different things.** 0.8.0 changed
+  what the `token` column *holds* (a SHA-256 digest rather than the raw token)
+  without changing its type, so it needs no `ALTER TABLE` but is still a
+  breaking upgrade — see "Upgrading to 0.8.0" below.
 - **Apply the upgrade DDL, don't just re-run `CREATE`.** Upgrade blocks use
   `ADD COLUMN IF NOT EXISTS` so they are safe to run more than once and safe on
   a table that predates or already has the column. The template for such a
@@ -283,15 +288,69 @@ To stay ahead of this:
   ALTER TABLE mcp_refresh_tokens ADD COLUMN IF NOT EXISTS <column> <type>;
   ```
 
-  There are no such blocks yet — the schema has not changed since it was first
-  published. This section is where they will appear when it does.
+  There are no such blocks yet — no release has changed a column's type or
+  added one. This section is where they will appear when one does.
 
-As a backstop, `initialize()` performs a lightweight `information_schema` check
-on the token tables that already exist and raises a clear error naming any
-required column that is missing, so schema drift fails fast at startup instead
-of surfacing as a mid-request `UndefinedColumnError`. Tables you have not
-created are left alone (the `mcp_refresh_tokens` table is only needed if you use
-the refresh-token methods).
+#### Upgrading to 0.8.0
+
+No DDL change is required: 0.8.0 added no columns and changed no types. But it
+did change what the `token` column contains, from the raw token to its SHA-256
+digest, so **every row written by 0.7.0 or earlier is unreadable after the
+upgrade**. Access tokens and refresh tokens alike will fail to load and clients
+will have to obtain new ones — plan the upgrade as you would a token revocation.
+
+Rows written before the upgrade are inert rather than harmful: they can never
+match a lookup again, and the `cleanup_expired_tokens()` /
+`cleanup_expired_refresh_tokens()` sweeps remove them once `expires_at` passes.
+To clear them immediately instead of waiting out the TTL:
+
+```sql
+DELETE FROM mcp_access_tokens;
+DELETE FROM mcp_refresh_tokens;
+```
+
+As a backstop against the *shape* half of the problem, `initialize()` performs a
+lightweight `information_schema` check on the token tables that already exist
+and raises [`SchemaDriftError`](#storage-errors) naming any required column that
+is missing, so drift fails fast at startup instead of surfacing as a mid-request
+`UndefinedColumnError`. Tables you have not created are left alone (the
+`mcp_refresh_tokens` table is only needed if you use the refresh-token methods).
+
+#### Storage errors
+
+Storage failures come in two kinds, and servers usually want to treat them
+differently. Misconfiguration — no `DATABASE_URL`, a drifted schema, a method
+called before `initialize()` — is reported with a subclass of `StorageError`,
+and retrying never fixes it. Everything else (an unreachable database, a dropped
+connection, a saturated pool) surfaces as an `asyncpg` error or `OSError`, and
+may well be transient.
+
+| Exception | Raised when | Also a |
+|---|---|---|
+| `StorageError` | base class for all of the below | `Exception` |
+| `StorageConfigError` | no database URL was given and `DATABASE_URL` is unset | `ValueError` |
+| `SchemaDriftError` | an existing token table is missing a required column | `RuntimeError` |
+| `StorageNotInitializedError` | a storage method was called before `initialize()` | `RuntimeError` |
+
+Each subclasses the builtin that the same condition raised in earlier releases,
+so existing `except RuntimeError` / `except ValueError` handlers keep working.
+
+Prefer aborting startup on `StorageError`. If you configured a database, you
+asked for tokens that outlive a restart and are visible to every replica;
+falling back to in-memory storage instead means a token issued by one replica is
+rejected by the next, which is harder to diagnose than a refused startup:
+
+```python
+storage = PostgresTokenStorage(database_url)
+try:
+    await storage.initialize()
+except StorageError:
+    logger.exception("Token storage is misconfigured; refusing to start")
+    raise
+except (asyncpg.PostgresError, OSError):
+    logger.warning("Database unavailable at startup, will retry")
+    raise
+```
 
 Tokens are hashed at rest: the `token` column holds the SHA-256 hex digest of
 the token, never the raw secret, so a database compromise does not leak

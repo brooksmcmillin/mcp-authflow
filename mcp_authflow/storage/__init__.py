@@ -10,6 +10,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from mcp_authflow.storage.base import TokenStorage, UserId
+from mcp_authflow.storage.exceptions import (
+    SchemaDriftError,
+    StorageConfigError,
+    StorageError,
+    StorageNotInitializedError,
+)
 from mcp_authflow.storage.memory import MemoryTokenStorage
 
 if TYPE_CHECKING:
@@ -19,6 +25,10 @@ __all__ = [
     "TokenStorage",
     "MemoryTokenStorage",
     "PostgresTokenStorage",
+    "SchemaDriftError",
+    "StorageConfigError",
+    "StorageError",
+    "StorageNotInitializedError",
     "UserId",
 ]
 

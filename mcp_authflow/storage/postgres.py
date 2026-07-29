@@ -16,6 +16,11 @@ except ImportError as _exc:
     ) from _exc
 
 from mcp_authflow.storage.base import TokenStorage, UserId, hash_token, token_fingerprint
+from mcp_authflow.storage.exceptions import (
+    SchemaDriftError,
+    StorageConfigError,
+    StorageNotInitializedError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +55,9 @@ class PostgresTokenStorage(TokenStorage):
     async def initialize(self) -> None:
         """Initialize the database connection pool."""
         if not self.database_url:
-            raise ValueError("DATABASE_URL environment variable is required for token storage")
+            raise StorageConfigError(
+                "DATABASE_URL environment variable is required for token storage"
+            )
 
         logger.info("Initializing database connection pool for token storage")
         self._pool = await asyncpg.create_pool(
@@ -105,7 +112,7 @@ class PostgresTokenStorage(TokenStorage):
                 f"{table} is missing column(s): {', '.join(cols)}"
                 for table, cols in sorted(missing.items())
             )
-            raise RuntimeError(
+            raise SchemaDriftError(
                 f"Token storage schema is out of date: {detail}. "
                 "CREATE TABLE IF NOT EXISTS does not add columns to an existing "
                 "table -- apply the ALTER TABLE upgrade DDL from the README "
@@ -122,7 +129,9 @@ class PostgresTokenStorage(TokenStorage):
     def _require_pool(self) -> "asyncpg.Pool":
         """Return the connection pool, raising if the storage is not initialized."""
         if not self._pool:
-            raise RuntimeError("Token storage not initialized. Call initialize() first.")
+            raise StorageNotInitializedError(
+                "Token storage not initialized. Call initialize() first."
+            )
         return self._pool
 
     async def _store_to(
