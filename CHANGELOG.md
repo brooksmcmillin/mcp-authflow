@@ -12,6 +12,20 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## 0.8.1
+
+### Added
+
 - Token storage now reports misconfiguration through a dedicated exception
   hierarchy rooted at `StorageError`: `StorageConfigError` (no database URL),
   `SchemaDriftError` (an existing token table is missing a required column), and
@@ -26,12 +40,6 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
   `except ValueError` handlers are unaffected. The README's new "Storage errors"
   section documents the hierarchy and shows the recommended startup pattern.
 
-### Changed
-
-### Deprecated
-
-### Removed
-
 ### Fixed
 
 - The README's "Schema versioning and upgrades" section claimed "the schema has
@@ -42,8 +50,6 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
   "Upgrading to 0.8.0" block stating that no `ALTER TABLE` is needed, that every
   pre-0.8.0 row is unreadable, and how to clear the dead rows immediately rather
   than waiting out their TTL.
-
-### Security
 
 ## 0.8.0
 
