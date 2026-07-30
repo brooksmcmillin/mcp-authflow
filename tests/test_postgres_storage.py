@@ -35,10 +35,6 @@ def _mock_conn(fetchrow_return: dict | None = None, execute_return: str = "DELET
     conn.fetchrow = AsyncMock(return_value=fetchrow_return)
     conn.fetchval = AsyncMock(return_value=True)
     conn.execute = AsyncMock(return_value=execute_return)
-    transaction_ctx = AsyncMock()
-    transaction_ctx.__aenter__ = AsyncMock(return_value=None)
-    transaction_ctx.__aexit__ = AsyncMock(return_value=False)
-    conn.transaction = MagicMock(return_value=transaction_ctx)
     return conn
 
 
@@ -727,21 +723,19 @@ class TestRuntimeErrorGuards:
 
 class TestRevokeClientTokens:
     @pytest.mark.asyncio
-    async def test_deletes_access_and_refresh_tokens_in_one_transaction(self) -> None:
+    async def test_deletes_access_and_refresh_tokens_in_one_statement(self) -> None:
         storage = _make_storage()
-        conn = _mock_conn()
-        conn.execute = AsyncMock(side_effect=["DELETE 2", "DELETE 1"])
+        conn = _mock_conn(fetchrow_return={"count": 3})
         _patch_pool(storage, conn)
 
         count = await storage.revoke_client_tokens("client1")
 
         assert count == 3
-        conn.transaction.assert_called_once_with()
-        assert conn.execute.await_count == 2
-        assert "mcp_access_tokens" in conn.execute.await_args_list[0].args[0]
-        assert "mcp_refresh_tokens" in conn.execute.await_args_list[1].args[0]
-        assert conn.execute.await_args_list[0].args[1] == "client1"
-        assert conn.execute.await_args_list[1].args[1] == "client1"
+        conn.execute.assert_not_awaited()
+        args = conn.fetchrow.await_args.args
+        assert "DELETE FROM mcp_access_tokens" in args[0]
+        assert "DELETE FROM mcp_refresh_tokens" in args[0]
+        assert args[1] == "client1"
 
     @pytest.mark.asyncio
     async def test_access_only_schema_still_revokes_access_tokens(self) -> None:

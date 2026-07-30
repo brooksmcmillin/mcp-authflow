@@ -184,7 +184,7 @@ revoked_count = await storage.revoke_client_tokens(client_id)
 
 Custom `TokenStorage` subclasses must implement `revoke_client_tokens()` when
 upgrading from 0.8.x. The PostgreSQL backend revokes both token types in one
-transaction and continues to work when the optional refresh-token table has
+single-snapshot statement and continues to work when the optional refresh-token table has
 not been created.
 
 `PostgresTokenStorage` does **not** create or migrate its schema — it expects
