@@ -713,6 +713,36 @@ class TestRuntimeErrorGuards:
         with pytest.raises(RuntimeError, match="initialize"):
             await storage.cleanup_expired_refresh_tokens()
 
+    @pytest.mark.asyncio
+    async def test_revoke_client_tokens_raises_when_not_initialized(self) -> None:
+        storage = PostgresTokenStorage(database_url="postgresql://test:test@localhost/test")
+        with pytest.raises(RuntimeError, match="initialize"):
+            await storage.revoke_client_tokens("client1")
+
+
+class TestRevokeClientTokens:
+    @pytest.mark.asyncio
+    async def test_deletes_access_and_refresh_tokens_in_one_statement(self) -> None:
+        storage = _make_storage()
+        conn = _mock_conn(fetchrow_return={"count": 3})
+        _patch_pool(storage, conn)
+
+        count = await storage.revoke_client_tokens("client1")
+
+        assert count == 3
+        args = conn.fetchrow.call_args.args
+        assert "DELETE FROM mcp_access_tokens" in args[0]
+        assert "DELETE FROM mcp_refresh_tokens" in args[0]
+        assert args[1] == "client1"
+
+    @pytest.mark.asyncio
+    async def test_returns_zero_when_no_tokens_match(self) -> None:
+        storage = _make_storage()
+        conn = _mock_conn(fetchrow_return=None)
+        _patch_pool(storage, conn)
+
+        assert await storage.revoke_client_tokens("unknown") == 0
+
 
 class TestGetTokenCount:
     """Tests for get_token_count()."""

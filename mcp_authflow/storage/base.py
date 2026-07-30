@@ -155,6 +155,21 @@ class TokenStorage(ABC):
         ...
 
     @abstractmethod
+    async def revoke_client_tokens(self, client_id: str) -> int:
+        """Revoke every access and refresh token issued to a client.
+
+        Implementations should remove both token types atomically when their
+        storage backend supports transactions.
+
+        Args:
+            client_id: OAuth client ID whose tokens should be revoked
+
+        Returns:
+            Total number of access and refresh tokens removed
+        """
+        ...
+
+    @abstractmethod
     async def cleanup_expired_tokens(self) -> int:
         """Remove all expired access tokens.
 

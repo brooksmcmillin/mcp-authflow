@@ -363,6 +363,31 @@ class PostgresTokenStorage(TokenStorage):
         """
         await self._delete_from("mcp_refresh_tokens", refresh_token, "refresh token")
 
+    async def revoke_client_tokens(self, client_id: str) -> int:
+        """Atomically revoke every access and refresh token issued to a client."""
+        pool = self._require_pool()
+        query = """
+            WITH deleted_access AS (
+                DELETE FROM mcp_access_tokens
+                WHERE client_id = $1
+                RETURNING 1
+            ), deleted_refresh AS (
+                DELETE FROM mcp_refresh_tokens
+                WHERE client_id = $1
+                RETURNING 1
+            )
+            SELECT
+                (SELECT COUNT(*) FROM deleted_access)
+                + (SELECT COUNT(*) FROM deleted_refresh) AS count
+        """
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(query, client_id)
+
+        count = row["count"] if row else 0
+        if count > 0:
+            logger.info("Revoked %s token(s) for client %s", count, client_id)
+        return count
+
     async def cleanup_expired_refresh_tokens(self) -> int:
         """Remove all expired refresh tokens from the database.
 

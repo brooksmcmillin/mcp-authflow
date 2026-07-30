@@ -22,6 +22,15 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Security
 
+- `TokenStorage` now exposes `revoke_client_tokens(client_id)`, implemented by
+  both built-in backends, so authorization servers can immediately invalidate
+  every access and refresh token bound to a deleted dynamic client as
+  recommended by RFC 7592 section 2.3. PostgreSQL performs both deletions in a
+  single statement, and tokens belonging to other clients are unaffected. The
+  documented schema now includes `client_id` indexes to keep this security path
+  fast on large token tables; existing deployments should add the documented
+  concurrent indexes before relying on frequent client-wide revocation.
+
 ## 0.8.1
 
 ### Added

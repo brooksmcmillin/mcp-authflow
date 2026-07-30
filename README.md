@@ -177,6 +177,9 @@ storage = PostgresTokenStorage(database_url="postgresql://user:pass@host/db")
 storage = PostgresTokenStorage()
 
 await storage.initialize()  # Open the connection pool (in-memory needs no setup)
+
+# RFC 7592 client deletion: revoke every access and refresh token for the client.
+revoked_count = await storage.revoke_client_tokens(client_id)
 ```
 
 `PostgresTokenStorage` does **not** create or migrate its schema — it expects
@@ -199,6 +202,10 @@ CREATE TABLE IF NOT EXISTS mcp_access_tokens (
 CREATE INDEX IF NOT EXISTS idx_mcp_access_tokens_expires_at
     ON mcp_access_tokens (expires_at);
 
+-- Keeps client-wide revocation bounded to that client's rows.
+CREATE INDEX IF NOT EXISTS idx_mcp_access_tokens_client_id
+    ON mcp_access_tokens (client_id);
+
 -- Only needed if you use the refresh-token methods.
 CREATE TABLE IF NOT EXISTS mcp_refresh_tokens (
     token       TEXT PRIMARY KEY,  -- SHA-256 digest of the refresh token, not the raw value
@@ -212,6 +219,9 @@ CREATE TABLE IF NOT EXISTS mcp_refresh_tokens (
 
 CREATE INDEX IF NOT EXISTS idx_mcp_refresh_tokens_expires_at
     ON mcp_refresh_tokens (expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_mcp_refresh_tokens_client_id
+    ON mcp_refresh_tokens (client_id);
 ```
 
 On an already-large, live table, build the index with `CREATE INDEX
@@ -223,6 +233,10 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_mcp_access_tokens_expires_at
     ON mcp_access_tokens (expires_at);
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_mcp_refresh_tokens_expires_at
     ON mcp_refresh_tokens (expires_at);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_mcp_access_tokens_client_id
+    ON mcp_access_tokens (client_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_mcp_refresh_tokens_client_id
+    ON mcp_refresh_tokens (client_id);
 ```
 
 #### Choosing a `user_id` column type
