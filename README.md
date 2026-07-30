@@ -8,6 +8,7 @@ Pair with [mcp-authflow-resource](https://github.com/brooksmcmillin/mcp-authflow
 
 - **Token storage** with PostgreSQL and in-memory backends
 - **RFC 6749** standardized OAuth error responses
+- **RFC 7591 Dynamic Client Registration** handler with a pluggable client registry
 - **RFC 7523 `private_key_jwt`** client authentication with algorithm allowlist and JTI replay protection (Redis or in-memory)
 - **RFC 7636 PKCE** verification (`S256` + `plain`, with an opt-in S256-only policy) and input validation for the token endpoint
 - **RFC 8628 Device Authorization Grant** — sans-IO polling state machine and code generators
@@ -438,6 +439,34 @@ from mcp_authflow.responses import (
 ```
 
 Each returns a Starlette `JSONResponse` with the appropriate status code and `Cache-Control: no-store` header.
+
+### Dynamic Client Registration
+
+`build_register_handler` returns a Starlette endpoint implementing RFC 7591.
+Persistence is delegated to a `ClientRegistry`, so the handler works against
+any backend — `MemoryClientRegistry` is the process-local reference
+implementation.
+
+```python
+from starlette.routing import Route
+
+from mcp_authflow.registration import MemoryClientRegistry, build_register_handler
+
+handler = build_register_handler(
+    MemoryClientRegistry(),      # Implement ClientRegistry for your own backend
+    default_scope="mcp:tools",   # Granted when the request omits a scope
+)
+
+routes = [Route("/register", handler, methods=["POST"])]
+```
+
+Requests asking for `grant_types=["client_credentials"]` are issued as
+confidential clients (`client_secret_post`); everything else becomes a public
+client (`none`). Optional keyword arguments let you gate the endpoint with an
+initial access token (`auth_validator`), attach a rate limiter, supply default
+redirect URIs, rewrite or re-validate redirect URIs, and run post-registration
+hooks. See the [registration API reference](https://brooksmcmillin.github.io/mcp-authflow/api/registration/)
+for the full set.
 
 ### Rate Limiting
 

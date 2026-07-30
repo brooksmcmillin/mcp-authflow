@@ -20,6 +20,15 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Fixed
 
+- The README's "Features" list never mentioned RFC 7591 Dynamic Client
+  Registration, even though the `mcp_authflow.registration` module has been a
+  top-level export and a headline feature in the docs since 0.4.0. Someone
+  sizing up the library from the README alone would conclude it cannot register
+  clients dynamically. The list now carries the same bullet as the docs, and the
+  README's API Reference gained a "Dynamic Client Registration" section with a
+  `build_register_handler` example. A new test asserts the README advertises
+  every RFC the docs do, so the two lists cannot drift apart again.
+
 ### Security
 
 ## 0.9.0
