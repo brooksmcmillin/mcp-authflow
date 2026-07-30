@@ -39,10 +39,8 @@ the template for the next cycle.
    `CHANGELOG.md` heading in step 2 is the only other place the number appears.)
 4. Commit (`release: X.Y.Z`), tag (`git tag vX.Y.Z`), and push with
    `--follow-tags`.
-5. Build and publish:
-   ```bash
-   uv build
-   uv publish
-   ```
+5. Verify the tag-triggered `Publish to PyPI` GitHub Actions workflow succeeds.
+   It builds and publishes through PyPI trusted publishing; do **not** also run
+   `uv publish` locally, which would race the workflow for the immutable version.
 6. Create the GitHub release from the tag, pasting the version's changelog
    section as the release notes.
