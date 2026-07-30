@@ -33,6 +33,7 @@ def _mock_conn(fetchrow_return: dict | None = None, execute_return: str = "DELET
     """Create a mock asyncpg connection."""
     conn = AsyncMock()
     conn.fetchrow = AsyncMock(return_value=fetchrow_return)
+    conn.fetchval = AsyncMock(return_value=True)
     conn.execute = AsyncMock(return_value=execute_return)
     return conn
 
@@ -712,6 +713,48 @@ class TestRuntimeErrorGuards:
         storage = PostgresTokenStorage(database_url="postgresql://test:test@localhost/test")
         with pytest.raises(RuntimeError, match="initialize"):
             await storage.cleanup_expired_refresh_tokens()
+
+    @pytest.mark.asyncio
+    async def test_revoke_client_tokens_raises_when_not_initialized(self) -> None:
+        storage = PostgresTokenStorage(database_url="postgresql://test:test@localhost/test")
+        with pytest.raises(RuntimeError, match="initialize"):
+            await storage.revoke_client_tokens("client1")
+
+
+class TestRevokeClientTokens:
+    @pytest.mark.asyncio
+    async def test_deletes_access_and_refresh_tokens_in_one_statement(self) -> None:
+        storage = _make_storage()
+        conn = _mock_conn(fetchrow_return={"count": 3})
+        _patch_pool(storage, conn)
+
+        count = await storage.revoke_client_tokens("client1")
+
+        assert count == 3
+        conn.execute.assert_not_awaited()
+        args = conn.fetchrow.await_args.args
+        assert "DELETE FROM mcp_access_tokens" in args[0]
+        assert "DELETE FROM mcp_refresh_tokens" in args[0]
+        assert args[1] == "client1"
+
+    @pytest.mark.asyncio
+    async def test_access_only_schema_still_revokes_access_tokens(self) -> None:
+        storage = _make_storage()
+        conn = _mock_conn(execute_return="DELETE 2")
+        conn.fetchval = AsyncMock(return_value=False)
+        _patch_pool(storage, conn)
+
+        assert await storage.revoke_client_tokens("client1") == 2
+        conn.execute.assert_awaited_once()
+        assert "mcp_access_tokens" in conn.execute.await_args.args[0]
+
+    @pytest.mark.asyncio
+    async def test_returns_zero_when_no_tokens_match(self) -> None:
+        storage = _make_storage()
+        conn = _mock_conn()
+        _patch_pool(storage, conn)
+
+        assert await storage.revoke_client_tokens("unknown") == 0
 
 
 class TestGetTokenCount:

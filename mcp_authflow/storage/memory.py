@@ -228,6 +228,30 @@ class MemoryTokenStorage(TokenStorage):
         """
         self._delete_from(self._refresh_tokens, refresh_token, "refresh token")
 
+    async def revoke_client_tokens(self, client_id: str) -> int:
+        """Revoke every access and refresh token issued to a client."""
+        self._require_initialized()
+        access_keys = [
+            key
+            for key, token_data in self._access_tokens.items()
+            if token_data["client_id"] == client_id
+        ]
+        refresh_keys = [
+            key
+            for key, token_data in self._refresh_tokens.items()
+            if token_data["client_id"] == client_id
+        ]
+
+        for key in access_keys:
+            del self._access_tokens[key]
+        for key in refresh_keys:
+            del self._refresh_tokens[key]
+
+        count = len(access_keys) + len(refresh_keys)
+        if count > 0:
+            logger.info("Revoked %s token(s) for client %s", count, client_id)
+        return count
+
     async def cleanup_expired_refresh_tokens(self) -> int:
         """Remove all expired refresh tokens from memory.
 

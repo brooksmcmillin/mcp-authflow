@@ -260,6 +260,28 @@ class TestDeleteRefreshToken:
         await storage.delete_refresh_token("no-such-rt")
 
 
+class TestRevokeClientTokens:
+    async def test_removes_both_token_types_for_only_the_requested_client(
+        self, storage: MemoryTokenStorage
+    ) -> None:
+        expires_at = int(time.time()) + 3600
+        await storage.store_token("access-a", "client-a", [], expires_at)
+        await storage.store_refresh_token("refresh-a", "client-a", [], expires_at)
+        await storage.store_token("access-b", "client-b", [], expires_at)
+        await storage.store_refresh_token("refresh-b", "client-b", [], expires_at)
+
+        count = await storage.revoke_client_tokens("client-a")
+
+        assert count == 2
+        assert await storage.load_token("access-a") is None
+        assert await storage.load_refresh_token("refresh-a") is None
+        assert await storage.load_token("access-b") is not None
+        assert await storage.load_refresh_token("refresh-b") is not None
+
+    async def test_unknown_client_is_noop(self, storage: MemoryTokenStorage) -> None:
+        assert await storage.revoke_client_tokens("unknown") == 0
+
+
 class TestCleanupExpiredRefreshTokens:
     async def test_returns_zero_when_empty(self, storage: MemoryTokenStorage) -> None:
         assert await storage.cleanup_expired_refresh_tokens() == 0
