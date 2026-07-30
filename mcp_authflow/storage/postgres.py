@@ -366,24 +366,20 @@ class PostgresTokenStorage(TokenStorage):
     async def revoke_client_tokens(self, client_id: str) -> int:
         """Atomically revoke every access and refresh token issued to a client."""
         pool = self._require_pool()
-        query = """
-            WITH deleted_access AS (
-                DELETE FROM mcp_access_tokens
-                WHERE client_id = $1
-                RETURNING 1
-            ), deleted_refresh AS (
-                DELETE FROM mcp_refresh_tokens
-                WHERE client_id = $1
-                RETURNING 1
+        async with pool.acquire() as conn, conn.transaction():
+            access_result = await conn.execute(
+                "DELETE FROM mcp_access_tokens WHERE client_id = $1", client_id
             )
-            SELECT
-                (SELECT COUNT(*) FROM deleted_access)
-                + (SELECT COUNT(*) FROM deleted_refresh) AS count
-        """
-        async with pool.acquire() as conn:
-            row = await conn.fetchrow(query, client_id)
+            has_refresh_table = await conn.fetchval(
+                "SELECT to_regclass('mcp_refresh_tokens') IS NOT NULL"
+            )
+            refresh_result = (
+                await conn.execute("DELETE FROM mcp_refresh_tokens WHERE client_id = $1", client_id)
+                if has_refresh_table
+                else None
+            )
 
-        count = row["count"] if row else 0
+        count = sum(int(result.split()[-1]) for result in (access_result, refresh_result) if result)
         if count > 0:
             logger.info("Revoked %s token(s) for client %s", count, client_id)
         return count

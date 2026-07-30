@@ -26,7 +26,10 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
   both built-in backends, so authorization servers can immediately invalidate
   every access and refresh token bound to a deleted dynamic client as
   recommended by RFC 7592 section 2.3. PostgreSQL performs both deletions in a
-  single statement, and tokens belonging to other clients are unaffected. The
+  single transaction (while still supporting access-token-only schemas), and
+  tokens belonging to other clients are unaffected. This new abstract method
+  is a breaking change for custom `TokenStorage` subclasses, which must
+  implement it when upgrading. The
   documented schema now includes `client_id` indexes to keep this security path
   fast on large token tables; existing deployments should add the documented
   concurrent indexes before relying on frequent client-wide revocation.
