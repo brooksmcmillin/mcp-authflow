@@ -20,6 +20,13 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Fixed
 
+- The README's "Storage interface" table listed only 9 of the 13 abstract
+  `TokenStorage` methods, omitting `initialize()`, `close()`,
+  `get_refresh_token_count()`, and `revoke_client_tokens()`. Anyone writing a
+  storage backend from the table would miss mandatory methods and only find out
+  at instantiation. The table now covers every abstract method, and a new test
+  fails if one lands without a row.
+
 - The README's "Features" list never mentioned RFC 7591 Dynamic Client
   Registration, even though the `mcp_authflow.registration` module has been a
   top-level export and a headline feature in the docs since 0.4.0. Someone
