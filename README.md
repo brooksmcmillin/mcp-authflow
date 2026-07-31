@@ -381,10 +381,13 @@ digest is 64 hex characters, so existing rows will no longer match on lookup.
 Perform an expand-contract migration (rehash existing tokens, or expire and
 reissue them) as part of the upgrade.
 
-**Storage interface:**
+**Storage interface:** every method below is abstract on `TokenStorage`, so a
+subclass must implement all of them.
 
 | Method | Description |
 |--------|-------------|
+| `initialize()` | Set up the backend (open pools, etc.) |
+| `close()` | Close the backend and release its resources |
 | `store_token(token, client_id, scopes, expires_at, resource?, user_id?)` | Store an access token |
 | `load_token(token) -> dict \| None` | Look up a token |
 | `delete_token(token)` | Revoke a token |
@@ -394,6 +397,8 @@ reissue them) as part of the upgrade.
 | `load_refresh_token(token) -> dict \| None` | Look up a refresh token |
 | `delete_refresh_token(token)` | Revoke a refresh token |
 | `cleanup_expired_refresh_tokens() -> int` | Purge expired refresh tokens, returns count |
+| `get_refresh_token_count() -> int` | Count active refresh tokens |
+| `revoke_client_tokens(client_id) -> int` | Revoke every access and refresh token for a client, returns count |
 
 Token data returned by `load_token()`:
 
