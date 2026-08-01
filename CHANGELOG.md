@@ -20,6 +20,15 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Fixed
 
+- `slow_down()` was documented as returning "400 or 429" in both its docstring
+  (which renders into the API reference) and the README's response-helper list,
+  but it has no `status_code` parameter and always returns 400 — RFC 8628 §3.5
+  defines `slow_down` as a token-endpoint error, so it uses the same status as
+  `authorization_pending()`. Anyone handling the documented 429 was writing dead
+  code; `rate_limit_exceeded()` remains the helper for a generic 429. Both spots
+  now say 400, and new tests call every fixed-status helper and fail if the
+  README annotation or the docstring summary names a status it cannot return.
+
 - The README's "Storage interface" table listed only 9 of the 13 abstract
   `TokenStorage` methods, omitting `initialize()`, `close()`,
   `get_refresh_token_count()`, and `revoke_client_tokens()`. Anyone writing a

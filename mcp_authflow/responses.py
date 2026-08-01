@@ -56,9 +56,14 @@ def invalid_client(description: str) -> JSONResponse:
 
 
 def slow_down(description: str, retry_after: int | None = None) -> JSONResponse:
-    """Create a slow_down error response (400 or 429).
+    """Create a slow_down error response (400, RFC 8628 §3.5).
 
     Use for: rate limiting during device flow polling.
+
+    The status code is always 400, like the other device-flow polling errors —
+    RFC 8628 §3.5 defines ``slow_down`` as a token-endpoint error response, so
+    it uses the RFC 6749 §5.2 status. For a generic 429 on a non-polling
+    endpoint use :func:`rate_limit_exceeded` instead.
 
     Args:
         description: Error description

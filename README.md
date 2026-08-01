@@ -431,7 +431,7 @@ from mcp_authflow.responses import (
     access_denied,             # 400 - User/AS denied the request
     invalid_redirect_uri,      # 400 - Bad redirect_uri (RFC 7591 §3.2.2)
     authorization_pending,     # 400 - Device flow: keep polling (RFC 8628 §3.5)
-    slow_down,                 # 400 or 429 - Device flow: poll slower
+    slow_down,                 # 400 - Device flow: poll slower (RFC 8628 §3.5)
     expired_token,             # 400 - Device flow: device_code expired
     pkce_required,             # 400 - PKCE is required for this client
     rate_limit_exceeded,       # 429 - Too many requests
