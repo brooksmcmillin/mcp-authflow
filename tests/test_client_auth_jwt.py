@@ -558,11 +558,11 @@ class TestVerifyJWT:
 
         client_id = "https://client.example.com"
         assertion = _sign_jwt(private_key, client_id=client_id, audience=auth.token_endpoint)
-        # Replace the signature with non-base64url characters so PyJWT raises a
-        # DecodeError rather than an InvalidSignatureError.
+        # PyJWT versions differ on whether malformed signatures are rejected
+        # during header parsing or signature verification.
         header, payload, _ = assertion.split(".")
         tampered = f"{header}.{payload}.@@@"
-        with pytest.raises(JWTAuthError, match="JWT decode error"):
+        with pytest.raises(JWTAuthError, match="Invalid JWT format|JWT decode error"):
             await auth._verify_jwt(client_id, tampered, jwks)
 
     @pytest.mark.asyncio

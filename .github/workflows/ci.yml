@@ -47,7 +47,21 @@ jobs:
           enable-cache: true
       - run: uv python install ${{ matrix.python-version }}
       - run: uv sync --frozen --python ${{ matrix.python-version }}
-      - run: uv run pytest --tb=short --cov --cov-report=term-missing --cov-report=json
+      - name: Verify test interpreter
+        env:
+          EXPECTED_PYTHON: ${{ matrix.python-version }}
+        run: |
+          uv run --frozen --python "$EXPECTED_PYTHON" python - <<'PY'
+          import os
+          import sys
+
+          expected = tuple(map(int, os.environ["EXPECTED_PYTHON"].split(".")))
+          assert sys.version_info[:2] == expected, sys.version
+          print(sys.version)
+          PY
+      - run: >-
+          uv run --frozen --python ${{ matrix.python-version }} pytest
+          --tb=short --cov --cov-report=term-missing --cov-report=json
       - name: Upload coverage report
         if: matrix.python-version == '3.13'
         uses: actions/upload-artifact@v4
