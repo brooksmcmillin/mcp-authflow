@@ -171,6 +171,19 @@ def build_register_handler(
         if not isinstance(payload, dict):
             return invalid_request("Request body must be a JSON object")
 
+        # RFC 7591 §2 treats null metadata as omitted; validate all other
+        # values before host policy callbacks or persistence can see them.
+        for field in ("redirect_uris", "grant_types", "response_types"):
+            value = payload.get(field)
+            if value is not None and (
+                not isinstance(value, list) or any(not isinstance(item, str) for item in value)
+            ):
+                return invalid_request(f"{field} must be an array of strings")
+        for field in ("client_name", "scope", "token_endpoint_auth_method"):
+            value = payload.get(field)
+            if value is not None and not isinstance(value, str):
+                return invalid_request(f"{field} must be a string")
+
         logger.info(
             "DCR request: client_name=%r grant_types=%r redirect_uris=%r",
             payload.get("client_name"),

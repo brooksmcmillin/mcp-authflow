@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import Mock
 
+import pytest
 from starlette.applications import Starlette
 from starlette.routing import Route
 from starlette.testclient import TestClient
@@ -248,6 +250,59 @@ class TestRegisterHandler:
         resp = client.post("/register", json=["not", "an", "object"])
         assert resp.status_code == 400
         assert resp.json()["error"] == "invalid_request"
+
+    @pytest.mark.parametrize("field", ["redirect_uris", "grant_types", "response_types"])
+    @pytest.mark.parametrize(
+        "value", [42, False, "code", {}, [123], ["https://example.com/cb", 42], [None]]
+    )
+    def test_rejects_malformed_string_arrays(self, field: str, value: Any) -> None:
+        self._assert_invalid_metadata(field, value)
+
+    @pytest.mark.parametrize("field", ["client_name", "scope", "token_endpoint_auth_method"])
+    @pytest.mark.parametrize("value", [42, False, [], ["admin:all"], {}])
+    def test_rejects_malformed_strings(self, field: str, value: Any) -> None:
+        self._assert_invalid_metadata(field, value)
+
+    def _assert_invalid_metadata(self, field: str, value: Any) -> None:
+        rewriter = Mock(side_effect=AssertionError("rewriter must not run"))
+        validator = Mock(side_effect=AssertionError("validator must not run"))
+        name_factory = Mock(side_effect=AssertionError("name factory must not run"))
+        hook = Mock(side_effect=AssertionError("hook must not run"))
+        client, registry = _make_client(
+            redirect_uri_rewriters=[rewriter],
+            redirect_uri_validator=validator,
+            client_name_factory=name_factory,
+            post_register_hooks=[hook],
+        )
+        resp = client.post("/register", json={field: value})
+        assert resp.status_code == 400
+        assert resp.json()["error"] == "invalid_request"
+        assert field in resp.json()["error_description"]
+        assert registry._clients == {}
+        for callback in (rewriter, validator, name_factory, hook):
+            callback.assert_not_called()
+
+    def test_null_metadata_uses_existing_defaults(self) -> None:
+        client, _ = _make_client(default_redirect_uris=["https://example.com/cb"])
+        resp = client.post(
+            "/register",
+            json=dict.fromkeys(
+                [
+                    "redirect_uris",
+                    "grant_types",
+                    "response_types",
+                    "client_name",
+                    "scope",
+                    "token_endpoint_auth_method",
+                ]
+            ),
+        )
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["redirect_uris"] == ["https://example.com/cb"]
+        assert body["response_types"] == ["code"]
+        assert body["scope"] == DEFAULT_SCOPE
+        assert body["token_endpoint_auth_method"] == "none"
 
     def test_registry_failure_returns_500(self) -> None:
         class BoomRegistry(MemoryClientRegistry):
