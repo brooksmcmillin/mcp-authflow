@@ -20,6 +20,12 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
 
 ### Fixed
 
+### Security
+
+## 0.10.0
+
+### Fixed
+
 - `slow_down()` was documented as returning "400 or 429" in both its docstring
   (which renders into the API reference) and the README's response-helper list,
   but it has no `status_code` parameter and always returns 400 — RFC 8628 §3.5
@@ -46,6 +52,14 @@ Add entries under `## [Unreleased]` as PRs merge. At release time the
   every RFC the docs do, so the two lists cannot drift apart again.
 
 ### Security
+
+- Dynamic Client Registration now rejects malformed types for handled metadata
+  with HTTP 400 `invalid_request` before redirect-URI rewriting, policy callbacks,
+  or persistence. String arrays and scalar strings are checked explicitly,
+  preventing server errors and invalid stored metadata from malformed requests.
+  Null values retain their existing omitted-field behavior; valid registrations
+  and extension metadata are unaffected.
+  ([#92](https://github.com/brooksmcmillin/mcp-authflow/pull/92))
 
 ## 0.9.0
 
