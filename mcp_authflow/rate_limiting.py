@@ -9,11 +9,21 @@ __all__ = ["AsyncRedisClient", "SlidingWindowRateLimiter"]
 
 _REDIS_RATELIMIT_PREFIX = "mcp_auth:ratelimit:"
 
+_REDIS_ADMIT_SCRIPT = """
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
+if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[2]) then
+    return 0
+end
+redis.call('ZADD', KEYS[1], ARGV[3], ARGV[4])
+redis.call('EXPIRE', KEYS[1], ARGV[5])
+return 1
+"""
+
 
 class AsyncRedisClient(Protocol):
     """Minimal async Redis interface used for rate-limit storage."""
 
-    async def zadd(self, name: str, mapping: dict[str | bytes, float], **kwargs: Any) -> int: ...  # noqa: ANN401
+    async def eval(self, script: str, numkeys: int, *keys_and_args: str | int | float) -> int: ...
 
     async def zremrangebyscore(
         self,
@@ -21,10 +31,6 @@ class AsyncRedisClient(Protocol):
         min: float | str,
         max: float | str,  # noqa: A002
     ) -> int: ...
-
-    async def zcard(self, name: str) -> int: ...
-
-    async def expire(self, name: str, time: int) -> bool: ...
 
     async def zrange(
         self,
@@ -44,6 +50,9 @@ class SlidingWindowRateLimiter:
     is shared across all replicas and survives pod restarts.  When ``redis`` is
     ``None`` the limiter falls back to an in-process ``defaultdict`` (suitable
     for local development and single-replica deployments).
+
+    Redis admission uses an atomic Lua script, so the client must support
+    ``EVAL`` as well as the sorted-set reads used by ``get_retry_after``.
 
     Redis key format: ``mcp_auth:ratelimit:<client_id>:<window_seconds>``
     """
@@ -105,17 +114,7 @@ class SlidingWindowRateLimiter:
     # ------------------------------------------------------------------
 
     async def _is_allowed_redis(self, client_id: str) -> bool:
-        """Redis sliding-window check using a sorted set.
-
-        Uses ZADD + ZREMRANGEBYSCORE + ZCARD in sequence.  This is not
-        atomically safe under extremely high concurrency but is sufficient at
-        the scale of OAuth endpoints (a single wrong admission per burst is
-        acceptable and can be over-counted by at most the number of concurrent
-        callers).
-
-        For strict atomicity a Lua script could be used; the pipeline approach
-        here is simpler.
-        """
+        """Atomically prune, check capacity, record admission, and set expiry."""
         if self._redis is None:
             raise RuntimeError(
                 "Redis client is required but was not provided; "
@@ -125,21 +124,20 @@ class SlidingWindowRateLimiter:
         now = time.time()
         window_start = now - self.window_seconds
 
-        await self._redis.zremrangebyscore(key, "-inf", window_start)
-
-        count = await self._redis.zcard(key)
-
-        if count >= self.requests_per_window:
-            return False
-
         # Use a token suffix so two requests at the same float timestamp don't
         # collide on the sorted-set member name.
         member = f"{now}:{secrets.token_hex(4)}"
-        await self._redis.zadd(key, {member: now})
-
-        await self._redis.expire(key, self.window_seconds + 1)
-
-        return True
+        result = await self._redis.eval(
+            _REDIS_ADMIT_SCRIPT,
+            1,
+            key,
+            window_start,
+            self.requests_per_window,
+            now,
+            member,
+            self.window_seconds + 1,
+        )
+        return result == 1
 
     async def _get_retry_after_redis(self, client_id: str) -> int:
         if self._redis is None:
