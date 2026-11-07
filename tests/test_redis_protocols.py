@@ -7,17 +7,11 @@ from mcp_authflow.rate_limiting import SlidingWindowRateLimiter
 
 
 class _RateLimitRedis:
-    async def zadd(self, name: str, mapping: dict[str | bytes, float], **kwargs: Any) -> int:
+    async def eval(self, script: str, numkeys: int, *keys_and_args: str | int | float) -> int:
         return 1
 
     async def zremrangebyscore(self, name: str, min: float | str, max: float | str) -> int:
         return 0
-
-    async def zcard(self, name: str) -> int:
-        return 0
-
-    async def expire(self, name: str, time: int) -> bool:
-        return True
 
     async def zrange(self, name: str, start: int, end: int, withscores: bool = False) -> list[Any]:
         return []
@@ -41,7 +35,7 @@ class _JWKSProvider:
         return None
 
 
-def test_rate_limiter_accepts_sorted_set_only_adapter() -> None:
+def test_rate_limiter_accepts_script_and_sorted_set_adapter() -> None:
     limiter = SlidingWindowRateLimiter(10, 60, redis=_RateLimitRedis())
     assert limiter._redis is not None
 
