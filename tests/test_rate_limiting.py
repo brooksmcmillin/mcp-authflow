@@ -1,9 +1,15 @@
 """Tests for SlidingWindowRateLimiter."""
 
+import asyncio
 import threading
+from typing import cast
 from unittest.mock import AsyncMock, patch
 
-from mcp_authflow.rate_limiting import SlidingWindowRateLimiter
+import fakeredis.aioredis
+import pytest
+from redis.exceptions import ResponseError
+
+from mcp_authflow.rate_limiting import AsyncRedisClient, SlidingWindowRateLimiter
 
 # ---------------------------------------------------------------------------
 # Basic allow / deny (in-memory path)
@@ -220,8 +226,6 @@ class TestConcurrentRequests:
         Uses ``asyncio.run`` per thread so the async public interface is
         exercised without sharing an event loop.
         """
-        import asyncio
-
         limit = 10
         limiter = SlidingWindowRateLimiter(requests_per_window=limit, window_seconds=60)
         results: list[bool] = []
@@ -247,8 +251,6 @@ class TestConcurrentRequests:
 
     def test_multiple_clients_concurrent(self) -> None:
         """Each client tracks independently under concurrent access."""
-        import asyncio
-
         limiter = SlidingWindowRateLimiter(requests_per_window=5, window_seconds=60)
         client_allowed: dict[str, int] = {}
         lock = threading.Lock()
@@ -283,22 +285,22 @@ class TestRedisPath:
     async def test_is_allowed_delegates_to_redis(self) -> None:
         """is_allowed uses Redis when a client is configured."""
         redis = self._make_redis_mock()
-        redis.zcard.return_value = 0
-        redis.expire.return_value = True
+        redis.eval.return_value = 1
 
         limiter = SlidingWindowRateLimiter(requests_per_window=5, window_seconds=60, redis=redis)
         result = await limiter.is_allowed("client1")
 
         assert result is True
-        redis.zremrangebyscore.assert_awaited_once()
-        redis.zcard.assert_awaited_once()
-        redis.zadd.assert_awaited_once()
-        redis.expire.assert_awaited_once()
+        redis.eval.assert_awaited_once()
+        redis.zremrangebyscore.assert_not_awaited()
+        redis.zcard.assert_not_awaited()
+        redis.zadd.assert_not_awaited()
+        redis.expire.assert_not_awaited()
 
-    async def test_is_denied_when_redis_count_at_limit(self) -> None:
-        """is_allowed returns False when zcard equals the limit."""
+    async def test_is_denied_when_script_returns_zero(self) -> None:
+        """is_allowed returns False when the script denies admission."""
         redis = self._make_redis_mock()
-        redis.zcard.return_value = 5  # already at limit
+        redis.eval.return_value = 0
 
         limiter = SlidingWindowRateLimiter(requests_per_window=5, window_seconds=60, redis=redis)
         result = await limiter.is_allowed("client1")
@@ -331,14 +333,71 @@ class TestRedisPath:
     async def test_redis_key_format(self) -> None:
         """Redis key includes client_id and window_seconds for isolation."""
         redis = self._make_redis_mock()
-        redis.zcard.return_value = 0
-        redis.expire.return_value = True
+        redis.eval.return_value = 1
 
         limiter = SlidingWindowRateLimiter(requests_per_window=5, window_seconds=300, redis=redis)
         await limiter.is_allowed("my-client")
 
-        call_args = redis.zadd.call_args
-        key_arg: str = call_args[0][0]
+        call_args = redis.eval.call_args
+        assert call_args[0][1] == 1
+        key_arg: str = call_args[0][2]
         assert "my-client" in key_arg
         assert "300" in key_arg
         assert key_arg.startswith("mcp_auth:ratelimit:")
+
+    async def test_script_error_is_not_an_admission(self) -> None:
+        redis = self._make_redis_mock()
+        redis.eval.side_effect = ResponseError("script failed")
+        limiter = SlidingWindowRateLimiter(1, 60, redis=redis)
+
+        with pytest.raises(ResponseError, match="script failed"):
+            await limiter.is_allowed("c")
+        redis.zadd.assert_not_awaited()
+
+
+class TestRedisAdmission:
+    @pytest.mark.parametrize("limit", [1, 7])
+    async def test_concurrent_replicas_enforce_exact_limit(self, limit: int) -> None:
+        server = fakeredis.FakeServer()
+        async with (
+            fakeredis.aioredis.FakeRedis(server=server) as redis_a,
+            fakeredis.aioredis.FakeRedis(server=server) as redis_b,
+        ):
+            limiters = [
+                SlidingWindowRateLimiter(limit, 60, redis=cast(AsyncRedisClient, r))
+                for r in (redis_a, redis_b)
+            ]
+            with patch("mcp_authflow.rate_limiting.time.time", return_value=1_000_000.0):
+                results = await asyncio.gather(
+                    *(limiters[i % 2].is_allowed("shared") for i in range(100))
+                )
+                assert sum(results) == limit
+                assert await redis_a.zcard(limiters[0]._redis_key("shared")) == limit
+                assert await limiters[0].is_allowed("other") is True
+
+    async def test_sliding_window_and_denial_preserve_state(self) -> None:
+        async with fakeredis.aioredis.FakeRedis() as redis:
+            limiter = SlidingWindowRateLimiter(2, 10, redis=cast(AsyncRedisClient, redis))
+            key = limiter._redis_key("c")
+            with patch("mcp_authflow.rate_limiting.time.time") as clock:
+                clock.return_value = 1_000_000.0
+                assert await limiter.is_allowed("c") is True
+                assert 0 < await redis.ttl(key) <= 11
+                clock.return_value += 6
+                assert await limiter.is_allowed("c") is True
+                entries = await redis.zrange(key, 0, -1, withscores=True)
+                # A denial must neither add a member nor extend the key's TTL.
+                await redis.expire(key, 5)
+                assert await limiter.is_allowed("c") is False
+                assert await redis.zrange(key, 0, -1, withscores=True) == entries
+                assert 0 < await redis.ttl(key) <= 5
+                assert await limiter.get_retry_after("c") == 5
+                clock.return_value += 4
+                assert await limiter.is_allowed("c") is True  # exact cutoff evicted
+                assert await redis.zcard(key) == 2
+                assert await limiter.is_allowed("c") is False
+                assert await limiter.get_retry_after("c") == 7
+                clock.return_value += 11
+                assert await limiter.get_retry_after("c") == 0
+                assert await limiter.is_allowed("c") is True
+                assert await redis.zcard(key) == 1
