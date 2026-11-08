@@ -61,7 +61,7 @@ limiter = SlidingWindowRateLimiter(
 )
 ```
 
-Any object that satisfies [`AsyncRedisClient`][mcp_authflow.rate_limiting.AsyncRedisClient] will work. The protocol covers only the methods this module actually calls.
+Any object that satisfies [`AsyncRedisClient`][mcp_authflow.rate_limiting.AsyncRedisClient] will work. Admission uses a single atomic Lua script so concurrent requests across replicas cannot exceed the limit. Redis must permit `EVAL` and the script's sorted-set and expiry commands (`ZREMRANGEBYSCORE`, `ZCARD`, `ZADD`, `EXPIRE`); retry queries also require `ZRANGE`. Custom adapters must implement `eval` as well as the sorted-set read/prune methods in the protocol.
 
 ## CORS
 
