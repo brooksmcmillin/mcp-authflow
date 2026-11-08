@@ -39,7 +39,7 @@ Issues = "https://github.com/brooksmcmillin/mcp-authflow/issues"
 dev = [
     "asyncpg>=0.31.0",
     "cryptography>=42.0.0",
-    "fakeredis>=2.20.0",
+    "fakeredis[lua]>=2.20.0",
     # Required by starlette.testclient, which the test suite uses.
     "httpx2>=2.9.0",
     "pytest>=9.0.0",
