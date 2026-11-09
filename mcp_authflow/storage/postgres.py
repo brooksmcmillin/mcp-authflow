@@ -66,8 +66,19 @@ class PostgresTokenStorage(TokenStorage):
             max_size=10,
             command_timeout=30,
         )
+        try:
+            await self._verify_schema()
+        except BaseException:
+            pool = self._pool
+            self._pool = None
+            try:
+                await pool.close()
+            except BaseException:
+                logger.exception(
+                    "Failed to close database connection pool after schema verification"
+                )
+            raise
         logger.info("Database connection pool initialized")
-        await self._verify_schema()
 
     async def _verify_schema(self) -> None:
         """Fail fast when an existing token table is missing a required column.
