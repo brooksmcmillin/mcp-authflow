@@ -8,12 +8,14 @@ Also covers error paths: initialize() pool creation, close() idempotency,
 and RuntimeError guards for all methods called before initialize().
 """
 
+from asyncio import CancelledError
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from mcp_authflow.storage.base import hash_token
+from mcp_authflow.storage.exceptions import SchemaDriftError, StorageNotInitializedError
 from mcp_authflow.storage.postgres import PostgresTokenStorage
 
 
@@ -548,6 +550,38 @@ class TestInitialize:
             command_timeout=30,
         )
         assert storage._pool is mock_pool
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("error_type", [SchemaDriftError, RuntimeError, CancelledError])
+    @pytest.mark.parametrize("close_error_type", [None, RuntimeError, CancelledError])
+    async def test_initialize_cleans_up_when_schema_verification_fails(
+        self, error_type: type[BaseException], close_error_type: type[BaseException] | None
+    ) -> None:
+        storage = PostgresTokenStorage(database_url="postgresql://test:test@localhost/test")
+        failed_pool = AsyncMock()
+        if close_error_type:
+            failed_pool.close.side_effect = close_error_type("close failed")
+        retry_pool = MagicMock()
+        conn = _mock_conn()
+        error = error_type("schema verification failed")
+        conn.fetch = AsyncMock(side_effect=[error, _schema_rows()])
+        _patch_pool_on(failed_pool, conn)
+        _patch_pool_on(retry_pool, conn)
+
+        with patch("asyncpg.create_pool", new=AsyncMock(side_effect=[failed_pool, retry_pool])):
+            with pytest.raises(error_type) as exc_info:
+                await storage.initialize()
+
+            assert exc_info.value is error
+            failed_pool.close.assert_awaited_once_with()
+            assert storage._pool is None
+            with pytest.raises(StorageNotInitializedError):
+                await storage.load_token("test_token")
+            await storage.close()
+            failed_pool.close.assert_awaited_once_with()
+
+            await storage.initialize()
+            assert storage._pool is retry_pool
 
 
 class TestVerifySchema:
